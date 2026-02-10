@@ -7,6 +7,12 @@ import json
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
 CORS(app)
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "ok",
+        "message": "Sistema Durtron backend corriendo 🚀"
+    })
 
 # Configuración para producción
 DATABASE = 'inventory.db'
@@ -144,17 +150,18 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 # ==================== RUTAS WEB ====================
 
-@app.route('/')
-def index():
-    """Servir el frontend"""
-    return send_from_directory('frontend', 'index.html')
+# @app.route('/')
+# def index():
+#     """Servir el frontend"""
+#     return send_from_directory('frontend', 'index.html')
 
-@app.route('/<path:path>')
-def serve_static(path):
-    """Servir archivos estáticos"""
-    return send_from_directory('frontend', path)
+# @app.route('/<path:path>')
+# def serve_static(path):
+#     """Servir archivos estáticos"""
+#     return send_from_directory('frontend', path)
 
 # ==================== RUTAS API ====================
 
