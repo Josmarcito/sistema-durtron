@@ -7,12 +7,6 @@ import json
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
 CORS(app)
-@app.route("/")
-def home():
-    return jsonify({
-        "status": "ok",
-        "message": "Sistema Durtron backend corriendo 🚀"
-    })
 
 # Configuración para producción
 DATABASE = 'inventory.db'
@@ -150,20 +144,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-
-# ==================== RUTAS WEB ====================
-
-# @app.route('/')
-# def index():
-#     """Servir el frontend"""
-#     return send_from_directory('frontend', 'index.html')
-
-# @app.route('/<path:path>')
-# def serve_static(path):
-#     """Servir archivos estáticos"""
-#     return send_from_directory('frontend', path)
-
-# ==================== RUTAS API ====================
+# ==================== RUTAS API (DEBEN IR PRIMERO) ====================
 
 @app.route('/api/equipos', methods=['GET'])
 def get_equipos():
@@ -553,6 +534,26 @@ def get_config():
             'Financiamiento'
         ]
     })
+
+# ==================== RUTAS WEB (AL FINAL) ====================
+
+@app.route('/')
+def index():
+    """Servir el frontend"""
+    return send_from_directory('frontend', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Servir archivos estáticos"""
+    # No capturar rutas API
+    if path.startswith('api/'):
+        return jsonify({'error': 'API route not found'}), 404
+    
+    try:
+        return send_from_directory('frontend', path)
+    except:
+        # Si no encuentra el archivo, devuelve index.html
+        return send_from_directory('frontend', 'index.html')
 
 # Inicializar BD al arrancar
 if not os.path.exists(DATABASE):
