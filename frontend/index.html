@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DURTRON - Sistema de Inventario</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <h1>🏭 DURTRON</h1>
+                    <p>Innovación Industrial</p>
+                </div>
+                <nav class="nav">
+                    <button class="nav-btn active" data-section="dashboard">Dashboard</button>
+                    <button class="nav-btn" data-section="inventario">Inventario</button>
+                    <button class="nav-btn" data-section="ventas">Ventas</button>
+                    <button class="nav-btn" data-section="nuevo">+ Nuevo Equipo</button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            
+            <!-- DASHBOARD Section -->
+            <section id="dashboard" class="section active">
+                <h2>📊 Dashboard</h2>
+                
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-info">
+                            <h3 id="stat-total">0</h3>
+                            <p>Total Equipos</p>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-info">
+                            <h3 id="stat-disponibles">0</h3>
+                            <p>Disponibles</p>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-info">
+                            <h3 id="stat-ventas-mes">0</h3>
+                            <p>Ventas del Mes</p>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-info">
+                            <h3 id="stat-ingresos">$0</h3>
+                            <p>Ingresos del Mes</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="quick-stats">
+                    <div class="quick-stat-card">
+                        <h3>Por Estado</h3>
+                        <div id="stats-estado" class="stat-list"></div>
+                    </div>
+                    
+                    <div class="quick-stat-card">
+                        <h3>Por Ubicación</h3>
+                        <div id="stats-ubicacion" class="stat-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- INVENTARIO Section -->
+            <section id="inventario" class="section">
+                <div class="section-header">
+                    <h2>📦 Inventario de Equipos</h2>
+                    <div class="filters">
+                        <input type="text" id="search-input" placeholder="🔍 Buscar por código, nombre, modelo...">
+                        <select id="filter-estado">
+                            <option value="">Todos los estados</option>
+                        </select>
+                        <select id="filter-categoria">
+                            <option value="">Todas las categorías</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Equipo</th>
+                                <th>Marca/Modelo</th>
+                                <th>Categoría</th>
+                                <th>Precio Lista</th>
+                                <th>Precio Mínimo</th>
+                                <th>Estado</th>
+                                <th>Ubicación</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-tbody">
+                            <tr>
+                                <td colspan="9" class="loading">Cargando inventario...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- VENTAS Section -->
+            <section id="ventas" class="section">
+                <h2>💰 Historial de Ventas</h2>
+                
+                <div class="table-container">
+                    <table class="sales-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>N° Serie</th>
+                                <th>Equipo</th>
+                                <th>Cliente</th>
+                                <th>Vendedor</th>
+                                <th>Precio Venta</th>
+                                <th>Descuento</th>
+                                <th>Forma de Pago</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sales-tbody">
+                            <tr>
+                                <td colspan="8" class="loading">Cargando ventas...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- NUEVO EQUIPO Section -->
+            <section id="nuevo" class="section">
+                <h2>➕ Agregar Nuevo Equipo</h2>
+                
+                <form id="form-nuevo-equipo" class="form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="input-codigo">Código*</label>
+                            <input type="text" id="input-codigo" required placeholder="Ej: JC-150X250">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-nombre">Nombre del Equipo*</label>
+                            <input type="text" id="input-nombre" required placeholder="Ej: Quebradora de Quijada">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-marca">Marca</label>
+                            <input type="text" id="input-marca" placeholder="Ej: DURTRON">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-modelo">Modelo</label>
+                            <input type="text" id="input-modelo" placeholder="Ej: JC-150X250">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-categoria">Categoría</label>
+                            <select id="input-categoria">
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-precio-lista">Precio de Lista*</label>
+                            <input type="number" id="input-precio-lista" required step="0.01" placeholder="0.00">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-precio-minimo">Precio Mínimo*</label>
+                            <input type="number" id="input-precio-minimo" required step="0.01" placeholder="0.00">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-precio-costo">Precio de Costo</label>
+                            <input type="number" id="input-precio-costo" step="0.01" placeholder="0.00">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-ubicacion">Ubicación*</label>
+                            <select id="input-ubicacion" required>
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-estado">Estado*</label>
+                            <select id="input-estado" required>
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="input-cantidad">Cantidad Disponible</label>
+                            <input type="number" id="input-cantidad" value="1" min="1">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Especificaciones Técnicas</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="input-potencia">Potencia del Motor</label>
+                                <input type="text" id="input-potencia" placeholder="Ej: 30 HP">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="input-capacidad">Capacidad</label>
+                                <input type="text" id="input-capacidad" placeholder="Ej: 1-5 TPH">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="input-dimensiones">Dimensiones</label>
+                                <input type="text" id="input-dimensiones" placeholder="Ej: 150x250 cm">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="input-peso">Peso</label>
+                                <input type="text" id="input-peso" placeholder="Ej: 2500 kg">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="input-especificaciones">Especificaciones Adicionales</label>
+                        <textarea id="input-especificaciones" rows="3" placeholder="Detalles técnicos adicionales..."></textarea>
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label for="input-observaciones">Observaciones</label>
+                        <textarea id="input-observaciones" rows="2" placeholder="Notas u observaciones..."></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="btn-limpiar">Limpiar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Equipo</button>
+                    </div>
+                </form>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Modal para Detalles de Equipo -->
+    <div id="modal-detalle" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Detalles del Equipo</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-detalle-body">
+                <!-- Se llena dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Vender Equipo -->
+    <div id="modal-venta" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registrar Venta</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-venta">
+                    <input type="hidden" id="venta-equipo-id">
+                    
+                    <div class="equipo-info" id="venta-equipo-info">
+                        <!-- Info del equipo -->
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="venta-vendedor">Vendedor*</label>
+                            <input type="text" id="venta-vendedor" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="venta-cliente">Nombre del Cliente*</label>
+                            <input type="text" id="venta-cliente" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="venta-contacto">Contacto</label>
+                            <input type="text" id="venta-contacto" placeholder="Tel/Email">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="venta-rfc">RFC</label>
+                            <input type="text" id="venta-rfc">
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="venta-direccion">Dirección</label>
+                        <input type="text" id="venta-direccion">
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="venta-precio">Precio de Venta*</label>
+                            <input type="number" id="venta-precio" required step="0.01">
+                            <small id="venta-precio-info"></small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="venta-forma-pago">Forma de Pago*</label>
+                            <select id="venta-forma-pago" required>
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width" id="venta-autorizacion" style="display: none;">
+                        <label for="venta-password">⚠️ Contraseña de Gerente (precio menor al mínimo)*</label>
+                        <input type="password" id="venta-password">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="venta-motivo">Motivo del Descuento (si aplica)</label>
+                        <textarea id="venta-motivo" rows="2"></textarea>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="venta-notas">Notas</label>
+                        <textarea id="venta-notas" rows="2"></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Registrar Venta</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>📍 Av. del Sol #329, Durango, Dgo. | 📞 618 134 1056</p>
+            <p>&copy; 2024 DURTRON - Innovación Industrial</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
