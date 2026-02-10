@@ -8,7 +8,7 @@ import requests
 import json
 
 # CAMBIAR ESTA URL por la que te dé Render
-API_URL = "https://durtron-sistema.onrender.com/api"
+API_URL = "https://sistema-durtron.onrender.com/"
 
 # Catálogo completo DURTRON 2025
 productos = [
