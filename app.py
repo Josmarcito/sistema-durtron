@@ -301,6 +301,26 @@ def get_inv_item(iid):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/inventario/<int:iid>', methods=['DELETE'])
+def delete_inv_item(iid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Verificar que no tenga ventas asociadas
+        cur.execute('SELECT COUNT(*) as cnt FROM ventas WHERE inventario_id=%s', (iid,))
+        if cur.fetchone()['cnt'] > 0:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'No se puede eliminar: tiene ventas asociadas. Elimina la venta primero.'}), 400
+        cur.execute('DELETE FROM inventario WHERE id=%s', (iid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Item eliminado del inventario'})
+    except Exception as e:
+        print(f'Error eliminando inventario: {e}')
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/inventario/<int:iid>/vender', methods=['POST'])
 def vender_item(iid):
     try:
