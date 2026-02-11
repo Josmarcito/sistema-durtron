@@ -1,147 +1,157 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from datetime import datetime
-import sqlite3
 import os
 import json
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from urllib.parse import urlparse
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
 CORS(app)
 
 # Configuración para producción
-DATABASE = 'inventory.db'
+DATABASE_URL = os.environ.get('DATABASE_URL')
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def get_db():
-    """Obtener conexión a la base de datos"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    """Obtener conexión a la base de datos PostgreSQL"""
+    # Render proporciona DATABASE_URL con postgres://, pero psycopg2 necesita postgresql://
+    if DATABASE_URL:
+        url = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+        conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
+    else:
+        # Fallback para desarrollo local (no debería pasar en producción)
+        conn = psycopg2.connect(
+            dbname='durtron',
+            user='postgres',
+            password='postgres',
+            host='localhost',
+            cursor_factory=RealDictCursor
+        )
     return conn
 
 def init_db():
-    """Inicializar la base de datos"""
+    """Inicializar la base de datos PostgreSQL"""
     conn = get_db()
     cursor = conn.cursor()
     
     # Tabla de equipos
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS equipos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            codigo TEXT UNIQUE NOT NULL,
-            nombre TEXT NOT NULL,
-            marca TEXT,
-            modelo TEXT,
-            numero_serie TEXT UNIQUE,
+            id SERIAL PRIMARY KEY,
+            codigo VARCHAR(50) UNIQUE NOT NULL,
+            nombre VARCHAR(255) NOT NULL,
+            marca VARCHAR(100),
+            modelo VARCHAR(100),
+            numero_serie VARCHAR(100) UNIQUE,
             descripcion TEXT,
-            categoria TEXT,
-            precio_lista REAL NOT NULL,
-            precio_minimo REAL NOT NULL,
-            precio_costo REAL,
-            ubicacion TEXT NOT NULL,
-            estado TEXT NOT NULL,
+            categoria VARCHAR(100),
+            precio_lista DECIMAL(10, 2) NOT NULL,
+            precio_minimo DECIMAL(10, 2) NOT NULL,
+            precio_costo DECIMAL(10, 2),
+            ubicacion VARCHAR(200) NOT NULL,
+            estado VARCHAR(50) NOT NULL,
             cantidad_disponible INTEGER DEFAULT 1,
             observaciones TEXT,
-            fecha_ingreso TEXT,
-            proveedor TEXT,
+            fecha_ingreso DATE,
+            proveedor VARCHAR(200),
             tiempo_stock_dias INTEGER,
             ficha_tecnica TEXT,
             fotos TEXT,
             especificaciones TEXT,
-            potencia_motor TEXT,
-            capacidad TEXT,
-            dimensiones TEXT,
-            peso TEXT,
-            creado_por TEXT,
-            fecha_creacion TEXT,
-            actualizado_por TEXT,
-            fecha_actualizacion TEXT
+            potencia_motor VARCHAR(50),
+            capacidad VARCHAR(50),
+            dimensiones VARCHAR(50),
+            peso VARCHAR(50),
+            creado_por VARCHAR(100),
+            fecha_creacion TIMESTAMP,
+            actualizado_por VARCHAR(100),
+            fecha_actualizacion TIMESTAMP
         )
     ''')
     
     # Tabla de movimientos
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS movimientos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            equipo_id INTEGER,
-            tipo_movimiento TEXT NOT NULL,
-            estado_anterior TEXT,
-            estado_nuevo TEXT,
-            ubicacion_anterior TEXT,
-            ubicacion_nueva TEXT,
-            usuario TEXT,
-            fecha TEXT,
-            notas TEXT,
-            FOREIGN KEY (equipo_id) REFERENCES equipos (id)
+            id SERIAL PRIMARY KEY,
+            equipo_id INTEGER REFERENCES equipos(id),
+            tipo_movimiento VARCHAR(100) NOT NULL,
+            estado_anterior VARCHAR(50),
+            estado_nuevo VARCHAR(50),
+            ubicacion_anterior VARCHAR(200),
+            ubicacion_nueva VARCHAR(200),
+            usuario VARCHAR(100),
+            fecha TIMESTAMP,
+            notas TEXT
         )
     ''')
     
     # Tabla de cotizaciones
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS cotizaciones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            equipo_id INTEGER,
-            cliente_nombre TEXT,
-            cliente_contacto TEXT,
-            cliente_rfc TEXT,
+            id SERIAL PRIMARY KEY,
+            equipo_id INTEGER REFERENCES equipos(id),
+            cliente_nombre VARCHAR(255),
+            cliente_contacto VARCHAR(100),
+            cliente_rfc VARCHAR(20),
             cliente_direccion TEXT,
-            precio_ofertado REAL,
-            descuento_porcentaje REAL,
-            descuento_monto REAL,
-            estado TEXT NOT NULL,
-            vendedor TEXT,
-            fecha_cotizacion TEXT,
-            fecha_vencimiento TEXT,
-            fecha_venta TEXT,
-            autorizado_por TEXT,
+            precio_ofertado DECIMAL(10, 2),
+            descuento_porcentaje DECIMAL(5, 2),
+            descuento_monto DECIMAL(10, 2),
+            estado VARCHAR(50) NOT NULL,
+            vendedor VARCHAR(100),
+            fecha_cotizacion DATE,
+            fecha_vencimiento DATE,
+            fecha_venta DATE,
+            autorizado_por VARCHAR(100),
             motivo_descuento TEXT,
-            forma_pago TEXT,
-            notas TEXT,
-            FOREIGN KEY (equipo_id) REFERENCES equipos (id)
+            forma_pago VARCHAR(50),
+            notas TEXT
         )
     ''')
     
     # Tabla de alertas de precio
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS alertas_precio (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            equipo_id INTEGER,
-            precio_intentado REAL,
-            precio_minimo REAL,
-            diferencia REAL,
-            usuario TEXT,
-            fecha TEXT,
-            autorizado BOOLEAN DEFAULT 0,
-            motivo TEXT,
-            FOREIGN KEY (equipo_id) REFERENCES equipos (id)
+            id SERIAL PRIMARY KEY,
+            equipo_id INTEGER REFERENCES equipos(id),
+            precio_intentado DECIMAL(10, 2),
+            precio_minimo DECIMAL(10, 2),
+            diferencia DECIMAL(10, 2),
+            usuario VARCHAR(100),
+            fecha TIMESTAMP,
+            autorizado BOOLEAN DEFAULT FALSE,
+            motivo TEXT
         )
     ''')
     
     # Tabla de ventas
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ventas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            equipo_id INTEGER NOT NULL,
-            vendedor TEXT NOT NULL,
-            cliente_nombre TEXT NOT NULL,
-            cliente_contacto TEXT,
-            cliente_rfc TEXT,
+            id SERIAL PRIMARY KEY,
+            equipo_id INTEGER NOT NULL REFERENCES equipos(id),
+            vendedor VARCHAR(100) NOT NULL,
+            cliente_nombre VARCHAR(255) NOT NULL,
+            cliente_contacto VARCHAR(100),
+            cliente_rfc VARCHAR(20),
             cliente_direccion TEXT,
-            precio_venta REAL NOT NULL,
-            descuento_monto REAL DEFAULT 0,
-            descuento_porcentaje REAL DEFAULT 0,
+            precio_venta DECIMAL(10, 2) NOT NULL,
+            descuento_monto DECIMAL(10, 2) DEFAULT 0,
+            descuento_porcentaje DECIMAL(5, 2) DEFAULT 0,
             motivo_descuento TEXT,
-            forma_pago TEXT,
-            autorizado_por TEXT,
+            forma_pago VARCHAR(50),
+            autorizado_por VARCHAR(100),
             fecha_venta DATE DEFAULT CURRENT_DATE,
-            numero_serie TEXT,
+            numero_serie VARCHAR(100),
             notas TEXT,
-            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (equipo_id) REFERENCES equipos (id)
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
     conn.commit()
+    cursor.close()
     conn.close()
 
 # ==================== RUTAS API (DEBEN IR PRIMERO) ====================
@@ -152,7 +162,8 @@ def get_equipos():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM equipos ORDER BY fecha_ingreso DESC')
-    equipos = [dict(row) for row in cursor.fetchall()]
+    equipos = cursor.fetchall()
+    cursor.close()
     conn.close()
     return jsonify(equipos)
 
@@ -161,12 +172,13 @@ def get_equipo(id):
     """Obtener un equipo específico"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM equipos WHERE id = ?', (id,))
+    cursor.execute('SELECT * FROM equipos WHERE id = %s', (id,))
     equipo = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     if equipo:
-        return jsonify(dict(equipo))
+        return jsonify(equipo)
     return jsonify({'error': 'Equipo no encontrado'}), 404
 
 @app.route('/api/equipos', methods=['POST'])
@@ -184,7 +196,8 @@ def crear_equipo():
                 ubicacion, estado, especificaciones,
                 potencia_motor, capacidad, dimensiones, peso,
                 cantidad_disponible, observaciones, fecha_ingreso
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         ''', (
             data.get('codigo'),
             data.get('nombre'),
@@ -206,13 +219,13 @@ def crear_equipo():
             datetime.now().strftime('%Y-%m-%d')
         ))
         
-        equipo_id = cursor.lastrowid
+        equipo_id = cursor.fetchone()['id']
         
         # Registrar movimiento
         cursor.execute('''
             INSERT INTO movimientos (
                 equipo_id, tipo_movimiento, estado_nuevo, fecha, notas
-            ) VALUES (?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s)
         ''', (
             equipo_id,
             'Ingreso',
@@ -222,6 +235,7 @@ def crear_equipo():
         ))
         
         conn.commit()
+        cursor.close()
         conn.close()
         
         return jsonify({
@@ -230,13 +244,17 @@ def crear_equipo():
             'message': 'Equipo creado exitosamente'
         }), 201
         
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError as e:
+        conn.rollback()
+        cursor.close()
         conn.close()
         return jsonify({
             'success': False,
             'error': 'El código de equipo ya existe'
         }), 400
     except Exception as e:
+        conn.rollback()
+        cursor.close()
         conn.close()
         return jsonify({
             'success': False,
@@ -251,23 +269,24 @@ def actualizar_equipo(id):
     cursor = conn.cursor()
     
     # Obtener estado actual
-    cursor.execute('SELECT estado, ubicacion FROM equipos WHERE id = ?', (id,))
+    cursor.execute('SELECT estado, ubicacion FROM equipos WHERE id = %s', (id,))
     equipo_actual = cursor.fetchone()
     
     if not equipo_actual:
+        cursor.close()
         conn.close()
         return jsonify({'error': 'Equipo no encontrado'}), 404
     
     try:
         cursor.execute('''
             UPDATE equipos SET
-                nombre = ?, marca = ?, modelo = ?, categoria = ?,
-                precio_lista = ?, precio_minimo = ?, precio_costo = ?,
-                ubicacion = ?, estado = ?, especificaciones = ?,
-                potencia_motor = ?, capacidad = ?, dimensiones = ?, peso = ?,
-                cantidad_disponible = ?, observaciones = ?,
-                fecha_actualizacion = ?
-            WHERE id = ?
+                nombre = %s, marca = %s, modelo = %s, categoria = %s,
+                precio_lista = %s, precio_minimo = %s, precio_costo = %s,
+                ubicacion = %s, estado = %s, especificaciones = %s,
+                potencia_motor = %s, capacidad = %s, dimensiones = %s, peso = %s,
+                cantidad_disponible = %s, observaciones = %s,
+                fecha_actualizacion = %s
+            WHERE id = %s
         ''', (
             data.get('nombre'),
             data.get('marca'),
@@ -299,7 +318,7 @@ def actualizar_equipo(id):
                     estado_anterior, estado_nuevo,
                     ubicacion_anterior, ubicacion_nueva,
                     fecha, notas
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 id,
                 'Cambio de Estado/Ubicación',
@@ -312,6 +331,7 @@ def actualizar_equipo(id):
             ))
         
         conn.commit()
+        cursor.close()
         conn.close()
         
         return jsonify({
@@ -320,6 +340,8 @@ def actualizar_equipo(id):
         })
         
     except Exception as e:
+        conn.rollback()
+        cursor.close()
         conn.close()
         return jsonify({
             'success': False,
@@ -334,10 +356,11 @@ def vender_equipo(id):
     cursor = conn.cursor()
     
     # Obtener información del equipo
-    cursor.execute('SELECT * FROM equipos WHERE id = ?', (id,))
+    cursor.execute('SELECT * FROM equipos WHERE id = %s', (id,))
     equipo = cursor.fetchone()
     
     if not equipo:
+        cursor.close()
         conn.close()
         return jsonify({'error': 'Equipo no encontrado'}), 404
     
@@ -355,6 +378,7 @@ def vender_equipo(id):
     if requiere_autorizacion:
         password = data.get('password_gerente', '')
         if password != 'gerente123':  # Cambiar en producción
+            cursor.close()
             conn.close()
             return jsonify({
                 'success': False,
@@ -371,7 +395,7 @@ def vender_equipo(id):
         año = datetime.now().year
         cursor.execute('''
             SELECT COUNT(*) as count FROM ventas 
-            WHERE numero_serie LIKE ?
+            WHERE numero_serie LIKE %s
         ''', (f"DUR-{equipo['modelo']}-{año}-%",))
         
         count = cursor.fetchone()['count']
@@ -384,7 +408,7 @@ def vender_equipo(id):
                 cliente_rfc, cliente_direccion, precio_venta,
                 descuento_monto, descuento_porcentaje, motivo_descuento,
                 forma_pago, autorizado_por, numero_serie, notas
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             id,
             data.get('vendedor'),
@@ -406,13 +430,14 @@ def vender_equipo(id):
         cursor.execute('''
             UPDATE equipos SET
                 estado = 'Vendida',
-                numero_serie = ?,
+                numero_serie = %s,
                 cantidad_disponible = cantidad_disponible - 1,
-                fecha_actualizacion = ?
-            WHERE id = ?
+                fecha_actualizacion = %s
+            WHERE id = %s
         ''', (numero_serie, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), id))
         
         conn.commit()
+        cursor.close()
         conn.close()
         
         return jsonify({
@@ -423,6 +448,8 @@ def vender_equipo(id):
         })
         
     except Exception as e:
+        conn.rollback()
+        cursor.close()
         conn.close()
         return jsonify({
             'success': False,
@@ -442,7 +469,8 @@ def get_ventas():
         ORDER BY v.fecha_venta DESC
     ''')
     
-    ventas = [dict(row) for row in cursor.fetchall()]
+    ventas = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     return jsonify(ventas)
@@ -477,10 +505,12 @@ def get_dashboard():
     cursor.execute('''
         SELECT COUNT(*) as total, SUM(precio_venta) as ingresos
         FROM ventas
-        WHERE strftime('%Y-%m', fecha_venta) = strftime('%Y-%m', 'now')
+        WHERE EXTRACT(YEAR FROM fecha_venta) = EXTRACT(YEAR FROM CURRENT_DATE)
+        AND EXTRACT(MONTH FROM fecha_venta) = EXTRACT(MONTH FROM CURRENT_DATE)
     ''')
     ventas_mes = cursor.fetchone()
     
+    cursor.close()
     conn.close()
     
     return jsonify({
@@ -489,7 +519,7 @@ def get_dashboard():
         'por_ubicacion': por_ubicacion,
         'ventas_mes': {
             'cantidad': ventas_mes['total'] or 0,
-            'ingresos': ventas_mes['ingresos'] or 0
+            'ingresos': float(ventas_mes['ingresos'] or 0)
         }
     })
 
@@ -556,9 +586,14 @@ def serve_static(path):
         return send_from_directory('frontend', 'index.html')
 
 # Inicializar BD al arrancar
-if not os.path.exists(DATABASE):
-    init_db()
-
 if __name__ == '__main__':
+    # Solo inicializar en producción si la variable de entorno está presente
+    if DATABASE_URL:
+        try:
+            init_db()
+            print("✅ Base de datos PostgreSQL inicializada")
+        except Exception as e:
+            print(f"⚠️ Error inicializando BD: {e}")
+    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
