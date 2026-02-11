@@ -325,14 +325,14 @@ async function loadVentas() {
         renderVentas();
     } catch (e) {
         document.getElementById('ventas-tbody').innerHTML =
-            `<tr><td colspan="7" class="loading">Error: ${e.message}</td></tr>`;
+            `<tr><td colspan="8" class="loading">Error: ${e.message}</td></tr>`;
     }
 }
 
 function renderVentas() {
     const tbody = document.getElementById('ventas-tbody');
     if (ventasData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">No hay ventas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="loading">No hay ventas registradas</td></tr>';
         return;
     }
     tbody.innerHTML = ventasData.map(v => `<tr>
@@ -343,7 +343,27 @@ function renderVentas() {
         <td class="text-right font-bold">${money(v.precio_venta)}</td>
         <td>${v.forma_pago || '-'}</td>
         <td>${v.facturado ? '<span class="badge badge-si">Si</span>' : '<span class="badge badge-no">No</span>'}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="deleteVenta(${v.id})">Eliminar</button></td>
     </tr>`).join('');
+}
+
+async function deleteVenta(id) {
+    if (!confirm('Eliminar esta venta? El equipo se restaurara al inventario como Disponible.')) return;
+    try {
+        const r = await fetch(`${API}/api/ventas/${id}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (data.success) {
+            notify('Venta eliminada', 'success');
+            loadVentas();
+            loadInventario();
+            loadDashboard();
+            loadVendedores();
+        } else {
+            notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
 }
 
 // ===== VENDEDORES =====
