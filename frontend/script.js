@@ -225,9 +225,27 @@ function renderInventario(items) {
             <div class="action-buttons">
                 <button class="btn btn-sm btn-primary" onclick="verDetalle(${it.id})">Ver</button>
                 ${canSell(it.estado) ? `<button class="btn btn-sm btn-success" onclick="openVenta(${it.id})">Vender</button>` : ''}
+                ${it.estado !== 'Vendida' ? `<button class="btn btn-sm btn-danger" onclick="deleteInventario(${it.id})">Eliminar</button>` : ''}
             </div>
         </td>
     </tr>`).join('');
+}
+
+async function deleteInventario(id) {
+    if (!confirm('Eliminar este item del inventario?')) return;
+    try {
+        const r = await fetch(`${API}/api/inventario/${id}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (data.success) {
+            notify('Item eliminado del inventario', 'success');
+            loadInventario();
+            loadDashboard();
+        } else {
+            notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
 }
 
 function setupInvFilters() {
