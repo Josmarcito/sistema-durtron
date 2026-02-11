@@ -76,17 +76,27 @@ def get_dashboard():
         cur.execute("SELECT COUNT(*) as total FROM inventario WHERE estado = 'Disponible'")
         inv_disponible = cur.fetchone()['total']
 
-        # Ventas del anio
-        cur.execute('SELECT COUNT(*) as cnt, COALESCE(SUM(precio_venta),0) as total FROM ventas WHERE EXTRACT(YEAR FROM fecha_venta)=%s', (year,))
+        # Ventas del anio: separar facturadas y no facturadas
+        cur.execute('''
+            SELECT COUNT(*) as cnt,
+                   COALESCE(SUM(precio_venta),0) as neto,
+                   COALESCE(SUM(CASE WHEN facturado=true THEN precio_venta ELSE 0 END),0) as neto_fact,
+                   COALESCE(SUM(CASE WHEN facturado=false THEN precio_venta ELSE 0 END),0) as neto_no_fact
+            FROM ventas WHERE EXTRACT(YEAR FROM fecha_venta)=%s
+        ''', (year,))
         row = cur.fetchone()
         ventas_anio_cnt = row['cnt']
-        ventas_anio_neto = float(row['total'])
+        ventas_anio_neto = float(row['neto'])
+        # IVA solo se aplica a las facturadas
+        ventas_anio_iva = round(float(row['neto_fact']) * 1.16 + float(row['neto_no_fact']), 2)
 
-        # Mensual
+        # Mensual: con desglose facturado/no facturado
         cur.execute('''
             SELECT EXTRACT(MONTH FROM fecha_venta)::int as mes,
                    COUNT(*) as cnt,
-                   COALESCE(SUM(precio_venta),0) as neto
+                   COALESCE(SUM(precio_venta),0) as neto,
+                   COALESCE(SUM(CASE WHEN facturado=true THEN precio_venta ELSE 0 END),0) as neto_fact,
+                   COALESCE(SUM(CASE WHEN facturado=false THEN precio_venta ELSE 0 END),0) as neto_no_fact
             FROM ventas
             WHERE EXTRACT(YEAR FROM fecha_venta)=%s
             GROUP BY mes ORDER BY mes
@@ -94,17 +104,24 @@ def get_dashboard():
         rows = cur.fetchall()
         monthly = {}
         for r in rows:
-            monthly[r['mes']] = {'total_ventas': r['cnt'], 'ingreso_neto': float(r['neto'])}
+            neto = float(r['neto'])
+            neto_fact = float(r['neto_fact'])
+            neto_no_fact = float(r['neto_no_fact'])
+            monthly[r['mes']] = {
+                'total_ventas': r['cnt'],
+                'ingreso_neto': neto,
+                'ingreso_iva': round(neto_fact * 1.16 + neto_no_fact, 2)
+            }
 
         meses_data = []
         for m in range(1, 13):
-            d = monthly.get(m, {'total_ventas': 0, 'ingreso_neto': 0.0})
+            d = monthly.get(m, {'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0})
             meses_data.append({
                 'mes': m,
                 'nombre': MESES[m-1],
                 'total_ventas': d['total_ventas'],
                 'ingreso_neto': d['ingreso_neto'],
-                'ingreso_iva': round(d['ingreso_neto'] * 1.16, 2)
+                'ingreso_iva': d['ingreso_iva']
             })
 
         # Trimestral
@@ -115,8 +132,9 @@ def get_dashboard():
             for i in range(3):
                 t['total_ventas'] += meses_data[start+i]['total_ventas']
                 t['ingreso_neto'] += meses_data[start+i]['ingreso_neto']
-            t['ingreso_iva'] = round(t['ingreso_neto'] * 1.16, 2)
+                t['ingreso_iva'] += meses_data[start+i]['ingreso_iva']
             t['ingreso_neto'] = round(t['ingreso_neto'], 2)
+            t['ingreso_iva'] = round(t['ingreso_iva'], 2)
             trimestres.append(t)
 
         cur.close()
@@ -128,7 +146,7 @@ def get_dashboard():
             'inv_disponible': inv_disponible,
             'ventas_anio': ventas_anio_cnt,
             'ingreso_neto_anio': ventas_anio_neto,
-            'ingreso_iva_anio': round(ventas_anio_neto * 1.16, 2),
+            'ingreso_iva_anio': ventas_anio_iva,
             'mensual': meses_data,
             'trimestral': trimestres,
             'year': year
