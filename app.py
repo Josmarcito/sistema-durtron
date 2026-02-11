@@ -354,6 +354,28 @@ def get_ventas():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/ventas/<int:vid>', methods=['DELETE'])
+def delete_venta(vid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Obtener el inventario_id antes de borrar
+        cur.execute('SELECT inventario_id FROM ventas WHERE id=%s', (vid,))
+        venta = cur.fetchone()
+        if not venta:
+            return jsonify({'error': 'Venta no encontrada'}), 404
+        # Restaurar inventario a Disponible
+        cur.execute("UPDATE inventario SET estado='Disponible' WHERE id=%s", (venta['inventario_id'],))
+        # Eliminar la venta
+        cur.execute('DELETE FROM ventas WHERE id=%s', (vid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Venta eliminada y equipo restaurado a inventario'})
+    except Exception as e:
+        print(f'Error eliminando venta: {e}')
+        return jsonify({'error': str(e)}), 500
+
 # ==================== VENDEDORES ====================
 @app.route('/api/vendedores')
 def get_vendedores():
