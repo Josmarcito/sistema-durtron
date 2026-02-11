@@ -23,6 +23,8 @@ def get_db():
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
+    if hasattr(obj, 'isoformat'):
+        return obj.isoformat()
     raise TypeError
 
 # ==================== RUTAS ESTATICAS ====================
@@ -43,8 +45,13 @@ def get_config():
             'No Disponible', 'Anticipo', 'En Cotizacion', 'Apartada'
         ],
         'categorias': [
-            'Quebradoras', 'Molinos', 'Cribas', 'Bandas Transportadoras',
-            'Equipos Auxiliares', 'Refacciones', 'Otro'
+            'Quebradoras de Quijadas', 'Pulverizadores de Martillos',
+            'Molinos de Bolas', 'Mesas de Concentracion',
+            'Cribas Vibratorias', 'Bandas Transportadoras',
+            'Tolvas', 'Tanques Agitadores', 'Concentrador Centrifugo',
+            'Planta Integral 500kg/hr', 'Planta Integral 1 ton/hr', 'Planta Integral 2 ton/hr',
+            'Quebradora de Laboratorio', 'Pulverizador de Laboratorio', 'Mesa de Laboratorio',
+            'Otro'
         ],
         'formas_pago': [
             'Contado', 'Credito 30 dias', 'Credito 60 dias', 'Credito 90 dias',
@@ -148,6 +155,20 @@ def get_equipos():
 def create_equipo():
     try:
         d = request.json
+        if not d:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+        codigo = (d.get('codigo') or '').strip()
+        nombre = (d.get('nombre') or '').strip()
+        if not codigo or not nombre:
+            return jsonify({'error': 'Codigo y Nombre son obligatorios'}), 400
+
+        def to_float(val, default=0):
+            try:
+                v = float(val) if val not in (None, '', 'null') else default
+                return v
+            except (ValueError, TypeError):
+                return default
+
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
@@ -156,11 +177,11 @@ def create_equipo():
                 potencia_motor, capacidad, dimensiones, peso, especificaciones)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
-            d.get('codigo',''), d.get('nombre',''), d.get('marca',''), d.get('modelo',''),
-            d.get('descripcion',''), d.get('categoria',''),
-            d.get('precio_lista', 0), d.get('precio_minimo', 0), d.get('precio_costo', 0),
-            d.get('potencia_motor',''), d.get('capacidad',''), d.get('dimensiones',''),
-            d.get('peso',''), d.get('especificaciones','')
+            codigo, nombre, d.get('marca') or '', d.get('modelo') or '',
+            d.get('descripcion') or '', d.get('categoria') or '',
+            to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
+            d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
+            d.get('peso') or '', d.get('especificaciones') or ''
         ))
         eid = cur.fetchone()['id']
         conn.commit()
@@ -168,6 +189,7 @@ def create_equipo():
         conn.close()
         return jsonify({'success': True, 'id': eid, 'message': 'Equipo agregado al catalogo'})
     except Exception as e:
+        print(f'Error creando equipo: {e}')
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/equipos/<int:eid>')
