@@ -318,6 +318,26 @@ def create_venta():
         print(f"Error al crear venta: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# ==================== ADMINISTRACIÓN ====================
+
+@app.route('/api/init-db', methods=['POST'])
+def init_database_manual():
+    """Inicializar base de datos manualmente (útil si el build command falla)"""
+    try:
+        import init_db
+        init_db.init_db()
+        return jsonify({
+            'status': 'success',
+            'message': 'Base de datos inicializada correctamente',
+            'tables': ['equipos', 'movimientos', 'cotizaciones', 'alertas_precio', 'ventas']
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': 'Error al inicializar la base de datos',
+            'error': str(e)
+        }), 500
+
 # ==================== VERIFICACIÓN DE SALUD ====================
 
 @app.route('/health')

@@ -15,10 +15,10 @@ async function initApp() {
     setupNavigation();
     setupForms();
     setupModals();
-    
+
     // Cargar configuración
     await loadConfig();
-    
+
     // Cargar datos iniciales
     await loadDashboard();
     await loadInventory();
@@ -28,12 +28,12 @@ async function initApp() {
 // ===== NAVEGACIÓN =====
 function setupNavigation() {
     const navButtons = document.querySelectorAll('.nav-btn');
-    
+
     navButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             const section = btn.dataset.section;
             showSection(section);
-            
+
             // Update active button
             navButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -46,7 +46,7 @@ function showSection(sectionId) {
     sections.forEach(section => {
         section.classList.remove('active');
     });
-    
+
     const targetSection = document.getElementById(sectionId);
     if (targetSection) {
         targetSection.classList.add('active');
@@ -58,7 +58,7 @@ async function loadConfig() {
     try {
         const response = await fetch(`${API_URL}/api/config`);
         config = await response.json();
-        
+
         // Llenar selects
         populateSelect('input-estado', config.estados);
         populateSelect('input-ubicacion', config.ubicaciones);
@@ -66,7 +66,7 @@ async function loadConfig() {
         populateSelect('filter-estado', config.estados);
         populateSelect('filter-categoria', config.categorias);
         populateSelect('venta-forma-pago', config.formas_pago);
-        
+
     } catch (error) {
         console.error('Error cargando configuración:', error);
         showNotification('Error al cargar la configuración', 'error');
@@ -76,15 +76,15 @@ async function loadConfig() {
 function populateSelect(selectId, options) {
     const select = document.getElementById(selectId);
     if (!select) return;
-    
+
     // Mantener primera opción si existe
     const firstOption = select.querySelector('option');
     select.innerHTML = '';
-    
+
     if (firstOption && firstOption.value === '') {
         select.appendChild(firstOption);
     }
-    
+
     options.forEach(option => {
         const opt = document.createElement('option');
         opt.value = option;
@@ -97,41 +97,40 @@ function populateSelect(selectId, options) {
 async function loadDashboard() {
     try {
         const response = await fetch(`${API_URL}/api/dashboard`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
-        
+
+        // Verificar si hay error en la respuesta
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
         // Actualizar stats cards
-        document.getElementById('stat-total').textContent = data.total_equipos;
-        document.getElementById('stat-disponibles').textContent = data.por_estado['Disponible'] || 0;
-        document.getElementById('stat-ventas-mes').textContent = data.ventas_mes.cantidad;
-        document.getElementById('stat-ingresos').textContent = formatMoney(data.ventas_mes.ingresos);
-        
-        // Mostrar stats por estado
+        document.getElementById('stat-total').textContent = data.total_equipos || 0;
+        document.getElementById('stat-disponibles').textContent = data.equipos_disponibles || 0;
+        document.getElementById('stat-ventas-mes').textContent = data.total_ventas || 0;
+        document.getElementById('stat-ingresos').textContent = formatMoney(data.ingresos_totales || 0);
+
+        // Limpiar secciones de stats
         const statsEstado = document.getElementById('stats-estado');
-        statsEstado.innerHTML = '';
-        Object.entries(data.por_estado).forEach(([estado, cantidad]) => {
-            statsEstado.innerHTML += `
-                <div class="stat-item">
-                    <span class="stat-item-label">${estado}</span>
-                    <span class="stat-item-value">${cantidad}</span>
-                </div>
-            `;
-        });
-        
-        // Mostrar stats por ubicación
         const statsUbicacion = document.getElementById('stats-ubicacion');
-        statsUbicacion.innerHTML = '';
-        Object.entries(data.por_ubicacion).forEach(([ubicacion, cantidad]) => {
-            statsUbicacion.innerHTML += `
-                <div class="stat-item">
-                    <span class="stat-item-label">${ubicacion}</span>
-                    <span class="stat-item-value">${cantidad}</span>
-                </div>
-            `;
-        });
-        
+
+        if (statsEstado) statsEstado.innerHTML = '<div class="stat-item"><span class="stat-item-label">Sin datos</span></div>';
+        if (statsUbicacion) statsUbicacion.innerHTML = '<div class="stat-item"><span class="stat-item-label">Sin datos</span></div>';
+
     } catch (error) {
         console.error('Error cargando dashboard:', error);
-        showNotification('Error al cargar el dashboard', 'error');
+        showNotification(`Error al cargar el dashboard: ${error.message}`, 'error');
+
+        // Mostrar valores en 0 en caso de error
+        document.getElementById('stat-total').textContent = '0';
+        document.getElementById('stat-disponibles').textContent = '0';
+        document.getElementById('stat-ventas-mes').textContent = '0';
+        document.getElementById('stat-ingresos').textContent = '$0';
     }
 }
 
@@ -139,29 +138,42 @@ async function loadDashboard() {
 async function loadInventory() {
     try {
         const response = await fetch(`${API_URL}/api/equipos`);
-        equipos = await response.json();
-        
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Verificar si hay error en la respuesta
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        equipos = Array.isArray(data) ? data : [];
+
         renderInventory(equipos);
         setupInventoryFilters();
-        
+
     } catch (error) {
         console.error('Error cargando inventario:', error);
         document.getElementById('inventory-tbody').innerHTML = `
-            <tr><td colspan="9" class="loading">❌ Error al cargar el inventario</td></tr>
+            <tr><td colspan="9" class="loading">❌ Error al cargar el inventario: ${error.message}</td></tr>
         `;
+        showNotification(`Error al cargar inventario: ${error.message}`, 'error');
     }
 }
 
 function renderInventory(equiposToRender) {
     const tbody = document.getElementById('inventory-tbody');
-    
+
     if (equiposToRender.length === 0) {
         tbody.innerHTML = `
             <tr><td colspan="9" class="loading">No hay equipos registrados</td></tr>
         `;
         return;
     }
-    
+
     tbody.innerHTML = equiposToRender.map(equipo => `
         <tr>
             <td><strong>${equipo.codigo}</strong></td>
@@ -192,34 +204,34 @@ function setupInventoryFilters() {
     const searchInput = document.getElementById('search-input');
     const filterEstado = document.getElementById('filter-estado');
     const filterCategoria = document.getElementById('filter-categoria');
-    
+
     const applyFilters = () => {
         let filtered = [...equipos];
-        
+
         // Filtro de búsqueda
         const searchTerm = searchInput.value.toLowerCase();
         if (searchTerm) {
-            filtered = filtered.filter(e => 
+            filtered = filtered.filter(e =>
                 e.codigo.toLowerCase().includes(searchTerm) ||
                 e.nombre.toLowerCase().includes(searchTerm) ||
                 (e.modelo && e.modelo.toLowerCase().includes(searchTerm)) ||
                 (e.marca && e.marca.toLowerCase().includes(searchTerm))
             );
         }
-        
+
         // Filtro de estado
         if (filterEstado.value) {
             filtered = filtered.filter(e => e.estado === filterEstado.value);
         }
-        
+
         // Filtro de categoría
         if (filterCategoria.value) {
             filtered = filtered.filter(e => e.categoria === filterCategoria.value);
         }
-        
+
         renderInventory(filtered);
     };
-    
+
     searchInput.addEventListener('input', applyFilters);
     filterEstado.addEventListener('change', applyFilters);
     filterCategoria.addEventListener('change', applyFilters);
@@ -234,7 +246,7 @@ function getBadgeEstado(estado) {
         'En Bodega/Almacén': 'badge-bodega',
         'En Piso de Venta': 'badge-piso'
     };
-    
+
     const badgeClass = badges[estado] || 'badge-disponible';
     return `<span class="badge ${badgeClass}">${estado}</span>`;
 }
@@ -247,28 +259,41 @@ function canSell(estado) {
 async function loadSales() {
     try {
         const response = await fetch(`${API_URL}/api/ventas`);
-        ventas = await response.json();
-        
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Verificar si hay error en la respuesta
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        ventas = Array.isArray(data) ? data : [];
+
         renderSales(ventas);
-        
+
     } catch (error) {
         console.error('Error cargando ventas:', error);
         document.getElementById('sales-tbody').innerHTML = `
-            <tr><td colspan="8" class="loading">❌ Error al cargar las ventas</td></tr>
+            <tr><td colspan="8" class="loading">❌ Error al cargar las ventas: ${error.message}</td></tr>
         `;
+        showNotification(`Error al cargar ventas: ${error.message}`, 'error');
     }
 }
 
 function renderSales(ventasToRender) {
     const tbody = document.getElementById('sales-tbody');
-    
+
     if (ventasToRender.length === 0) {
         tbody.innerHTML = `
             <tr><td colspan="8" class="loading">No hay ventas registradas</td></tr>
         `;
         return;
     }
-    
+
     tbody.innerHTML = ventasToRender.map(venta => `
         <tr>
             <td>${formatDate(venta.fecha_venta)}</td>
@@ -288,21 +313,21 @@ function setupForms() {
     const formNuevo = document.getElementById('form-nuevo-equipo');
     const btnLimpiar = document.getElementById('btn-limpiar');
     const formVenta = document.getElementById('form-venta');
-    
+
     formNuevo.addEventListener('submit', async (e) => {
         e.preventDefault();
         await createEquipo();
     });
-    
+
     btnLimpiar.addEventListener('click', () => {
         formNuevo.reset();
     });
-    
+
     formVenta.addEventListener('submit', async (e) => {
         e.preventDefault();
         await submitVenta();
     });
-    
+
     // Monitorear precio de venta
     const ventaPrecio = document.getElementById('venta-precio');
     if (ventaPrecio) {
@@ -330,7 +355,7 @@ async function createEquipo() {
         especificaciones: document.getElementById('input-especificaciones').value,
         observaciones: document.getElementById('input-observaciones').value
     };
-    
+
     try {
         const response = await fetch(`${API_URL}/api/equipos`, {
             method: 'POST',
@@ -339,9 +364,9 @@ async function createEquipo() {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             showNotification('✅ Equipo creado exitosamente', 'success');
             document.getElementById('form-nuevo-equipo').reset();
@@ -350,7 +375,7 @@ async function createEquipo() {
         } else {
             showNotification(`❌ ${result.error}`, 'error');
         }
-        
+
     } catch (error) {
         console.error('Error creando equipo:', error);
         showNotification('❌ Error al crear el equipo', 'error');
@@ -361,13 +386,13 @@ async function createEquipo() {
 function setupModals() {
     const modals = document.querySelectorAll('.modal');
     const closeButtons = document.querySelectorAll('.modal-close');
-    
+
     closeButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             closeAllModals();
         });
     });
-    
+
     modals.forEach(modal => {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -388,7 +413,7 @@ async function viewEquipo(id) {
     try {
         const response = await fetch(`${API_URL}/api/equipos/${id}`);
         const equipo = await response.json();
-        
+
         const modalBody = document.getElementById('modal-detalle-body');
         modalBody.innerHTML = `
             <div class="equipo-info-grid">
@@ -492,9 +517,9 @@ async function viewEquipo(id) {
                 </div>
             ` : ''}
         `;
-        
+
         document.getElementById('modal-detalle').classList.add('active');
-        
+
     } catch (error) {
         console.error('Error cargando detalles:', error);
         showNotification('Error al cargar los detalles del equipo', 'error');
@@ -506,9 +531,9 @@ async function openVentaModal(id) {
     try {
         const response = await fetch(`${API_URL}/api/equipos/${id}`);
         const equipo = await response.json();
-        
+
         document.getElementById('venta-equipo-id').value = id;
-        
+
         const equipoInfo = document.getElementById('venta-equipo-info');
         equipoInfo.innerHTML = `
             <div class="equipo-info-grid">
@@ -530,22 +555,22 @@ async function openVentaModal(id) {
                 </div>
             </div>
         `;
-        
+
         // Guardar precios en dataset para validación
         const ventaPrecio = document.getElementById('venta-precio');
         ventaPrecio.dataset.precioLista = equipo.precio_lista;
         ventaPrecio.dataset.precioMinimo = equipo.precio_minimo;
         ventaPrecio.value = equipo.precio_lista;
-        
+
         // Reset form
         document.getElementById('form-venta').reset();
         document.getElementById('venta-equipo-id').value = id;
         document.getElementById('venta-precio').value = equipo.precio_lista;
-        
+
         updateVentaPrecioInfo();
-        
+
         document.getElementById('modal-venta').classList.add('active');
-        
+
     } catch (error) {
         console.error('Error abriendo modal de venta:', error);
         showNotification('Error al abrir el formulario de venta', 'error');
@@ -557,13 +582,13 @@ function updateVentaPrecioInfo() {
     const precioLista = parseFloat(ventaPrecio.dataset.precioLista);
     const precioMinimo = parseFloat(ventaPrecio.dataset.precioMinimo);
     const precioVenta = parseFloat(ventaPrecio.value) || 0;
-    
+
     const descuento = precioLista - precioVenta;
     const descuentoPct = (descuento / precioLista * 100).toFixed(1);
-    
+
     const infoElement = document.getElementById('venta-precio-info');
     const autorizacionDiv = document.getElementById('venta-autorizacion');
-    
+
     if (precioVenta < precioMinimo) {
         infoElement.innerHTML = `⚠️ Precio menor al mínimo. Descuento: ${descuentoPct}%. Requiere autorización.`;
         infoElement.className = 'text-danger';
@@ -583,7 +608,7 @@ async function submitVenta() {
     const equipoId = document.getElementById('venta-equipo-id').value;
     const precioVenta = parseFloat(document.getElementById('venta-precio').value);
     const precioMinimo = parseFloat(document.getElementById('venta-precio').dataset.precioMinimo);
-    
+
     const data = {
         vendedor: document.getElementById('venta-vendedor').value,
         cliente_nombre: document.getElementById('venta-cliente').value,
@@ -595,17 +620,17 @@ async function submitVenta() {
         motivo_descuento: document.getElementById('venta-motivo').value,
         notas: document.getElementById('venta-notas').value
     };
-    
+
     // Si requiere autorización
     if (precioVenta < precioMinimo) {
         data.password_gerente = document.getElementById('venta-password').value;
-        
+
         if (!data.password_gerente) {
             showNotification('❌ Ingrese la contraseña de gerente', 'error');
             return;
         }
     }
-    
+
     try {
         const response = await fetch(`${API_URL}/api/equipos/${equipoId}/vender`, {
             method: 'POST',
@@ -614,9 +639,9 @@ async function submitVenta() {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             showNotification(`✅ Venta registrada exitosamente. N° Serie: ${result.numero_serie}`, 'success');
             closeAllModals();
@@ -626,7 +651,7 @@ async function submitVenta() {
         } else {
             showNotification(`❌ ${result.error}`, 'error');
         }
-        
+
     } catch (error) {
         console.error('Error registrando venta:', error);
         showNotification('❌ Error al registrar la venta', 'error');
@@ -668,9 +693,9 @@ function showNotification(message, type = 'info') {
         animation: slideIn 0.3s ease-out;
     `;
     notification.textContent = message;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.style.animation = 'slideOut 0.3s ease-in';
         setTimeout(() => {
