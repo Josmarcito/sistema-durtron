@@ -1,706 +1,546 @@
-// ===== CONFIGURACIÓN =====
-const API_URL = window.location.origin;
+// ===== CONFIGURACION =====
+const API = window.location.origin;
+let equiposCatalogo = [];
+let inventarioItems = [];
+let ventasData = [];
+let configData = {};
+let dashboardData = {};
+let periodoActual = 'mensual';
 
-// ===== ESTADO GLOBAL =====
-let equipos = [];
-let ventas = [];
-let config = {};
-
-// ===== INICIALIZACIÓN =====
+// ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
-    initApp();
+    setupNav();
+    setupForms();
+    loadConfig().then(() => {
+        loadDashboard();
+        loadCatalogo();
+        loadInventario();
+        loadVentas();
+        loadVendedores();
+    });
 });
 
-async function initApp() {
-    setupNavigation();
-    setupForms();
-    setupModals();
-    
-    // Cargar configuración
-    await loadConfig();
-    
-    // Cargar datos iniciales
-    await loadDashboard();
-    await loadInventory();
-    await loadSales();
-}
-
-// ===== NAVEGACIÓN =====
-function setupNavigation() {
-    const navButtons = document.querySelectorAll('.nav-btn');
-    
-    navButtons.forEach(btn => {
+// ===== NAVEGACION =====
+function setupNav() {
+    document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const section = btn.dataset.section;
-            showSection(section);
-            
-            // Update active button
-            navButtons.forEach(b => b.classList.remove('active'));
+            const s = btn.dataset.section;
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(s).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            if (s === 'vendedores') loadVendedores();
+            if (s === 'ventas') loadVentas();
+            if (s === 'dashboard') loadDashboard();
         });
     });
 }
 
-function showSection(sectionId) {
-    const sections = document.querySelectorAll('.section');
-    sections.forEach(section => {
-        section.classList.remove('active');
-    });
-    
-    const targetSection = document.getElementById(sectionId);
-    if (targetSection) {
-        targetSection.classList.add('active');
-    }
-}
-
-// ===== CONFIGURACIÓN =====
+// ===== CONFIGURACION =====
 async function loadConfig() {
     try {
-        const response = await fetch(`${API_URL}/api/config`);
-        config = await response.json();
-        
-        // Llenar selects
-        populateSelect('input-estado', config.estados);
-        populateSelect('input-ubicacion', config.ubicaciones);
-        populateSelect('input-categoria', config.categorias);
-        populateSelect('filter-estado', config.estados);
-        populateSelect('filter-categoria', config.categorias);
-        populateSelect('venta-forma-pago', config.formas_pago);
-        
-    } catch (error) {
-        console.error('Error cargando configuración:', error);
-        showNotification('Error al cargar la configuración', 'error');
+        const r = await fetch(`${API}/api/config`);
+        configData = await r.json();
+        fillSelect('cat-categoria', configData.categorias);
+        fillSelect('inv-estado', configData.estados_inventario);
+        fillSelect('inv-filter-estado', configData.estados_inventario, true);
+        fillSelect('venta-forma-pago', configData.formas_pago);
+    } catch (e) {
+        console.error('Error config:', e);
     }
 }
 
-function populateSelect(selectId, options) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    
-    // Mantener primera opción si existe
-    const firstOption = select.querySelector('option');
-    select.innerHTML = '';
-    
-    if (firstOption && firstOption.value === '') {
-        select.appendChild(firstOption);
+function fillSelect(id, options, addAll) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const first = sel.querySelector('option');
+    sel.innerHTML = '';
+    if (first) sel.appendChild(first);
+    if (addAll) {
+        const all = document.createElement('option');
+        all.value = '';
+        all.textContent = 'Todos';
+        if (!first) sel.appendChild(all);
     }
-    
-    options.forEach(option => {
+    (options || []).forEach(o => {
         const opt = document.createElement('option');
-        opt.value = option;
-        opt.textContent = option;
-        select.appendChild(opt);
+        opt.value = o;
+        opt.textContent = o;
+        sel.appendChild(opt);
     });
 }
 
 // ===== DASHBOARD =====
 async function loadDashboard() {
     try {
-        const response = await fetch(`${API_URL}/api/dashboard`);
-        const data = await response.json();
-        
-        // Actualizar stats cards
-        document.getElementById('stat-total').textContent = data.total_equipos;
-        document.getElementById('stat-disponibles').textContent = data.por_estado['Disponible'] || 0;
-        document.getElementById('stat-ventas-mes').textContent = data.ventas_mes.cantidad;
-        document.getElementById('stat-ingresos').textContent = formatMoney(data.ventas_mes.ingresos);
-        
-        // Mostrar stats por estado
-        const statsEstado = document.getElementById('stats-estado');
-        statsEstado.innerHTML = '';
-        Object.entries(data.por_estado).forEach(([estado, cantidad]) => {
-            statsEstado.innerHTML += `
-                <div class="stat-item">
-                    <span class="stat-item-label">${estado}</span>
-                    <span class="stat-item-value">${cantidad}</span>
-                </div>
-            `;
-        });
-        
-        // Mostrar stats por ubicación
-        const statsUbicacion = document.getElementById('stats-ubicacion');
-        statsUbicacion.innerHTML = '';
-        Object.entries(data.por_ubicacion).forEach(([ubicacion, cantidad]) => {
-            statsUbicacion.innerHTML += `
-                <div class="stat-item">
-                    <span class="stat-item-label">${ubicacion}</span>
-                    <span class="stat-item-value">${cantidad}</span>
-                </div>
-            `;
-        });
-        
-    } catch (error) {
-        console.error('Error cargando dashboard:', error);
-        showNotification('Error al cargar el dashboard', 'error');
+        const r = await fetch(`${API}/api/dashboard`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        dashboardData = await r.json();
+        const d = dashboardData;
+
+        document.getElementById('stat-catalogo').textContent = d.total_catalogo || 0;
+        document.getElementById('stat-inventario').textContent = d.total_inventario || 0;
+        document.getElementById('stat-ingreso-neto').textContent = money(d.ingreso_neto_anio);
+        document.getElementById('stat-ingreso-iva').textContent = money(d.ingreso_iva_anio);
+        document.getElementById('stat-total-ventas').textContent = d.ventas_anio || 0;
+
+        renderPeriodo();
+    } catch (e) {
+        console.error('Error dashboard:', e);
+        notify('Error al cargar dashboard: ' + e.message, 'error');
+    }
+}
+
+function showPeriodo(tipo) {
+    periodoActual = tipo;
+    document.getElementById('btn-mensual').classList.toggle('active', tipo === 'mensual');
+    document.getElementById('btn-trimestral').classList.toggle('active', tipo === 'trimestral');
+    renderPeriodo();
+}
+
+function renderPeriodo() {
+    const thead = document.getElementById('periodo-thead');
+    const tbody = document.getElementById('periodo-tbody');
+    if (!dashboardData.mensual) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">Sin datos</td></tr>';
+        return;
+    }
+
+    thead.innerHTML = '<tr><th>' + (periodoActual === 'mensual' ? 'Mes' : 'Trimestre') +
+        '</th><th class="text-right">Ventas</th><th class="text-right">Ingreso Neto</th><th class="text-right">Ingreso + IVA</th></tr>';
+
+    const data = periodoActual === 'mensual' ? dashboardData.mensual : dashboardData.trimestral;
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">Sin ventas registradas</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(d => {
+        const label = periodoActual === 'mensual' ? d.nombre : `Q${d.trimestre}`;
+        return `<tr>
+            <td><strong>${label}</strong></td>
+            <td class="text-right">${d.total_ventas}</td>
+            <td class="text-right font-bold">${money(d.ingreso_neto)}</td>
+            <td class="text-right">${money(d.ingreso_iva)}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ===== CATALOGO =====
+async function loadCatalogo() {
+    try {
+        const r = await fetch(`${API}/api/equipos`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        equiposCatalogo = Array.isArray(data) ? data : [];
+        renderCatalogo();
+        updateEquipoSelect();
+    } catch (e) {
+        console.error('Error catalogo:', e);
+        document.getElementById('catalogo-tbody').innerHTML =
+            `<tr><td colspan="8" class="loading">Error: ${e.message}</td></tr>`;
+    }
+}
+
+function renderCatalogo() {
+    const tbody = document.getElementById('catalogo-tbody');
+    if (equiposCatalogo.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="loading">No hay equipos en el catalogo</td></tr>';
+        return;
+    }
+    tbody.innerHTML = equiposCatalogo.map(eq => `<tr>
+        <td><strong>${eq.codigo}</strong></td>
+        <td>${eq.nombre}</td>
+        <td>${eq.marca || '-'}</td>
+        <td>${eq.modelo || '-'}</td>
+        <td>${eq.categoria || '-'}</td>
+        <td class="text-right">${money(eq.precio_lista)}</td>
+        <td class="text-right">${money(eq.precio_minimo)}</td>
+        <td>
+            <div class="action-buttons">
+                <button class="btn btn-sm btn-danger" onclick="deleteCatalogo(${eq.id})">Eliminar</button>
+            </div>
+        </td>
+    </tr>`).join('');
+}
+
+function updateEquipoSelect() {
+    const sel = document.getElementById('inv-equipo');
+    sel.innerHTML = '<option value="">Seleccionar equipo...</option>';
+    equiposCatalogo.forEach(eq => {
+        const opt = document.createElement('option');
+        opt.value = eq.id;
+        opt.textContent = `${eq.codigo} - ${eq.nombre}`;
+        sel.appendChild(opt);
+    });
+}
+
+async function deleteCatalogo(id) {
+    if (!confirm('Eliminar este equipo del catalogo?')) return;
+    try {
+        const r = await fetch(`${API}/api/equipos/${id}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (data.success) {
+            notify('Equipo eliminado del catalogo', 'success');
+            loadCatalogo();
+        } else {
+            notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
     }
 }
 
 // ===== INVENTARIO =====
-async function loadInventory() {
+async function loadInventario() {
     try {
-        const response = await fetch(`${API_URL}/api/equipos`);
-        equipos = await response.json();
-        
-        renderInventory(equipos);
-        setupInventoryFilters();
-        
-    } catch (error) {
-        console.error('Error cargando inventario:', error);
-        document.getElementById('inventory-tbody').innerHTML = `
-            <tr><td colspan="9" class="loading">❌ Error al cargar el inventario</td></tr>
-        `;
+        const r = await fetch(`${API}/api/inventario`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        inventarioItems = Array.isArray(data) ? data : [];
+        renderInventario(inventarioItems);
+        setupInvFilters();
+    } catch (e) {
+        console.error('Error inventario:', e);
+        document.getElementById('inventario-tbody').innerHTML =
+            `<tr><td colspan="8" class="loading">Error: ${e.message}</td></tr>`;
     }
 }
 
-function renderInventory(equiposToRender) {
-    const tbody = document.getElementById('inventory-tbody');
-    
-    if (equiposToRender.length === 0) {
-        tbody.innerHTML = `
-            <tr><td colspan="9" class="loading">No hay equipos registrados</td></tr>
-        `;
+function renderInventario(items) {
+    const tbody = document.getElementById('inventario-tbody');
+    if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="loading">No hay items en inventario</td></tr>';
         return;
     }
-    
-    tbody.innerHTML = equiposToRender.map(equipo => `
-        <tr>
-            <td><strong>${equipo.codigo}</strong></td>
-            <td>${equipo.nombre}</td>
-            <td>${equipo.marca || '-'} ${equipo.modelo || ''}</td>
-            <td>${equipo.categoria || '-'}</td>
-            <td class="text-right">${formatMoney(equipo.precio_lista)}</td>
-            <td class="text-right">${formatMoney(equipo.precio_minimo)}</td>
-            <td>${getBadgeEstado(equipo.estado)}</td>
-            <td>${equipo.ubicacion}</td>
-            <td>
-                <div class="action-buttons">
-                    <button class="btn btn-sm btn-primary" onclick="viewEquipo(${equipo.id})">
-                        👁️ Ver
-                    </button>
-                    ${canSell(equipo.estado) ? `
-                        <button class="btn btn-sm btn-success" onclick="openVentaModal(${equipo.id})">
-                            💰 Vender
-                        </button>
-                    ` : ''}
-                </div>
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = items.map(it => `<tr>
+        <td>${it.id}</td>
+        <td><strong>${it.equipo_codigo}</strong></td>
+        <td>${it.equipo_nombre}</td>
+        <td>${it.numero_serie || '-'}</td>
+        <td>${badgeEstado(it.estado)}</td>
+        <td class="text-right">${money(it.precio_lista)}</td>
+        <td>${formatDate(it.fecha_ingreso)}</td>
+        <td>
+            <div class="action-buttons">
+                <button class="btn btn-sm btn-primary" onclick="verDetalle(${it.id})">Ver</button>
+                ${canSell(it.estado) ? `<button class="btn btn-sm btn-success" onclick="openVenta(${it.id})">Vender</button>` : ''}
+            </div>
+        </td>
+    </tr>`).join('');
 }
 
-function setupInventoryFilters() {
-    const searchInput = document.getElementById('search-input');
-    const filterEstado = document.getElementById('filter-estado');
-    const filterCategoria = document.getElementById('filter-categoria');
-    
-    const applyFilters = () => {
-        let filtered = [...equipos];
-        
-        // Filtro de búsqueda
-        const searchTerm = searchInput.value.toLowerCase();
-        if (searchTerm) {
-            filtered = filtered.filter(e => 
-                e.codigo.toLowerCase().includes(searchTerm) ||
-                e.nombre.toLowerCase().includes(searchTerm) ||
-                (e.modelo && e.modelo.toLowerCase().includes(searchTerm)) ||
-                (e.marca && e.marca.toLowerCase().includes(searchTerm))
+function setupInvFilters() {
+    const search = document.getElementById('inv-search');
+    const estado = document.getElementById('inv-filter-estado');
+    const filter = () => {
+        let items = [...inventarioItems];
+        const term = search.value.toLowerCase();
+        if (term) {
+            items = items.filter(i =>
+                (i.equipo_codigo || '').toLowerCase().includes(term) ||
+                (i.equipo_nombre || '').toLowerCase().includes(term) ||
+                (i.numero_serie || '').toLowerCase().includes(term)
             );
         }
-        
-        // Filtro de estado
-        if (filterEstado.value) {
-            filtered = filtered.filter(e => e.estado === filterEstado.value);
-        }
-        
-        // Filtro de categoría
-        if (filterCategoria.value) {
-            filtered = filtered.filter(e => e.categoria === filterCategoria.value);
-        }
-        
-        renderInventory(filtered);
+        if (estado.value) items = items.filter(i => i.estado === estado.value);
+        renderInventario(items);
     };
-    
-    searchInput.addEventListener('input', applyFilters);
-    filterEstado.addEventListener('change', applyFilters);
-    filterCategoria.addEventListener('change', applyFilters);
-}
-
-function getBadgeEstado(estado) {
-    const badges = {
-        'Disponible': 'badge-disponible',
-        'Vendida - Entregada': 'badge-vendida',
-        'Vendida - Por Entregar': 'badge-vendida',
-        'Apartada': 'badge-apartada',
-        'En Bodega/Almacén': 'badge-bodega',
-        'En Piso de Venta': 'badge-piso'
-    };
-    
-    const badgeClass = badges[estado] || 'badge-disponible';
-    return `<span class="badge ${badgeClass}">${estado}</span>`;
+    search.addEventListener('input', filter);
+    estado.addEventListener('change', filter);
 }
 
 function canSell(estado) {
-    return ['Disponible', 'En Piso de Venta', 'Apartada', 'En Cotización'].includes(estado);
+    return ['Disponible', 'En Planta 1', 'En Planta 2', 'Apartada', 'Anticipo'].includes(estado);
 }
 
-// ===== VENTAS =====
-async function loadSales() {
+// ===== VER DETALLE =====
+async function verDetalle(id) {
     try {
-        const response = await fetch(`${API_URL}/api/ventas`);
-        ventas = await response.json();
-        
-        renderSales(ventas);
-        
-    } catch (error) {
-        console.error('Error cargando ventas:', error);
-        document.getElementById('sales-tbody').innerHTML = `
-            <tr><td colspan="8" class="loading">❌ Error al cargar las ventas</td></tr>
-        `;
-    }
-}
-
-function renderSales(ventasToRender) {
-    const tbody = document.getElementById('sales-tbody');
-    
-    if (ventasToRender.length === 0) {
-        tbody.innerHTML = `
-            <tr><td colspan="8" class="loading">No hay ventas registradas</td></tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = ventasToRender.map(venta => `
-        <tr>
-            <td>${formatDate(venta.fecha_venta)}</td>
-            <td><strong>${venta.numero_serie}</strong></td>
-            <td>${venta.nombre} (${venta.codigo})</td>
-            <td>${venta.cliente_nombre}</td>
-            <td>${venta.vendedor}</td>
-            <td class="text-right font-bold">${formatMoney(venta.precio_venta)}</td>
-            <td class="text-right">${venta.descuento_porcentaje.toFixed(1)}%</td>
-            <td>${venta.forma_pago}</td>
-        </tr>
-    `).join('');
-}
-
-// ===== NUEVO EQUIPO =====
-function setupForms() {
-    const formNuevo = document.getElementById('form-nuevo-equipo');
-    const btnLimpiar = document.getElementById('btn-limpiar');
-    const formVenta = document.getElementById('form-venta');
-    
-    formNuevo.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await createEquipo();
-    });
-    
-    btnLimpiar.addEventListener('click', () => {
-        formNuevo.reset();
-    });
-    
-    formVenta.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await submitVenta();
-    });
-    
-    // Monitorear precio de venta
-    const ventaPrecio = document.getElementById('venta-precio');
-    if (ventaPrecio) {
-        ventaPrecio.addEventListener('input', updateVentaPrecioInfo);
-    }
-}
-
-async function createEquipo() {
-    const data = {
-        codigo: document.getElementById('input-codigo').value,
-        nombre: document.getElementById('input-nombre').value,
-        marca: document.getElementById('input-marca').value,
-        modelo: document.getElementById('input-modelo').value,
-        categoria: document.getElementById('input-categoria').value,
-        precio_lista: parseFloat(document.getElementById('input-precio-lista').value),
-        precio_minimo: parseFloat(document.getElementById('input-precio-minimo').value),
-        precio_costo: parseFloat(document.getElementById('input-precio-costo').value) || null,
-        ubicacion: document.getElementById('input-ubicacion').value,
-        estado: document.getElementById('input-estado').value,
-        cantidad_disponible: parseInt(document.getElementById('input-cantidad').value) || 1,
-        potencia_motor: document.getElementById('input-potencia').value,
-        capacidad: document.getElementById('input-capacidad').value,
-        dimensiones: document.getElementById('input-dimensiones').value,
-        peso: document.getElementById('input-peso').value,
-        especificaciones: document.getElementById('input-especificaciones').value,
-        observaciones: document.getElementById('input-observaciones').value
-    };
-    
-    try {
-        const response = await fetch(`${API_URL}/api/equipos`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showNotification('✅ Equipo creado exitosamente', 'success');
-            document.getElementById('form-nuevo-equipo').reset();
-            await loadInventory();
-            await loadDashboard();
-        } else {
-            showNotification(`❌ ${result.error}`, 'error');
-        }
-        
-    } catch (error) {
-        console.error('Error creando equipo:', error);
-        showNotification('❌ Error al crear el equipo', 'error');
-    }
-}
-
-// ===== MODALES =====
-function setupModals() {
-    const modals = document.querySelectorAll('.modal');
-    const closeButtons = document.querySelectorAll('.modal-close');
-    
-    closeButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            closeAllModals();
-        });
-    });
-    
-    modals.forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeAllModals();
-            }
-        });
-    });
-}
-
-function closeAllModals() {
-    document.querySelectorAll('.modal').forEach(modal => {
-        modal.classList.remove('active');
-    });
-}
-
-// ===== VER DETALLES =====
-async function viewEquipo(id) {
-    try {
-        const response = await fetch(`${API_URL}/api/equipos/${id}`);
-        const equipo = await response.json();
-        
-        const modalBody = document.getElementById('modal-detalle-body');
-        modalBody.innerHTML = `
-            <div class="equipo-info-grid">
-                <div class="info-item">
-                    <div class="info-label">Código</div>
-                    <div class="info-value">${equipo.codigo}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Nombre</div>
-                    <div class="info-value">${equipo.nombre}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Marca</div>
-                    <div class="info-value">${equipo.marca || '-'}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Modelo</div>
-                    <div class="info-value">${equipo.modelo || '-'}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Categoría</div>
-                    <div class="info-value">${equipo.categoria || '-'}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Estado</div>
-                    <div class="info-value">${getBadgeEstado(equipo.estado)}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Ubicación</div>
-                    <div class="info-value">${equipo.ubicacion}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Cantidad</div>
-                    <div class="info-value">${equipo.cantidad_disponible}</div>
-                </div>
+        const r = await fetch(`${API}/api/inventario/${id}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const it = await r.json();
+        document.getElementById('modal-detalle-body').innerHTML = `
+            <div class="equipo-preview">
+                <div class="info-row"><span>Codigo:</span> <strong>${it.equipo_codigo}</strong></div>
+                <div class="info-row"><span>Nombre:</span> <strong>${it.equipo_nombre}</strong></div>
+                <div class="info-row"><span>Marca:</span> <strong>${it.marca || '-'}</strong> | <span>Modelo:</span> <strong>${it.modelo || '-'}</strong></div>
+                <div class="info-row"><span>Categoria:</span> <strong>${it.categoria || '-'}</strong></div>
+                <div class="info-row"><span>N/Serie:</span> <strong>${it.numero_serie || '-'}</strong></div>
+                <div class="info-row"><span>Estado:</span> ${badgeEstado(it.estado)}</div>
             </div>
-            
-            <div class="form-section">
-                <h3>💰 Precios</h3>
-                <div class="equipo-info-grid">
-                    <div class="info-item">
-                        <div class="info-label">Precio de Lista</div>
-                        <div class="info-value text-primary">${formatMoney(equipo.precio_lista)}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Precio Mínimo</div>
-                        <div class="info-value text-warning">${formatMoney(equipo.precio_minimo)}</div>
-                    </div>
-                    ${equipo.precio_costo ? `
-                        <div class="info-item">
-                            <div class="info-label">Precio de Costo</div>
-                            <div class="info-value">${formatMoney(equipo.precio_costo)}</div>
-                        </div>
-                    ` : ''}
-                </div>
+            <div class="equipo-preview" style="margin-top:1rem;">
+                <h4 style="margin-bottom:0.5rem;">Precios</h4>
+                <div class="info-row"><span>Lista:</span> <strong class="text-success">${money(it.precio_lista)}</strong></div>
+                <div class="info-row"><span>Minimo:</span> <strong class="text-warning">${money(it.precio_minimo)}</strong></div>
+                ${it.precio_costo ? `<div class="info-row"><span>Costo:</span> <strong>${money(it.precio_costo)}</strong></div>` : ''}
             </div>
-            
-            ${equipo.potencia_motor || equipo.capacidad || equipo.dimensiones || equipo.peso ? `
-                <div class="form-section">
-                    <h3>⚙️ Especificaciones Técnicas</h3>
-                    <div class="equipo-info-grid">
-                        ${equipo.potencia_motor ? `
-                            <div class="info-item">
-                                <div class="info-label">Potencia</div>
-                                <div class="info-value">${equipo.potencia_motor}</div>
-                            </div>
-                        ` : ''}
-                        ${equipo.capacidad ? `
-                            <div class="info-item">
-                                <div class="info-label">Capacidad</div>
-                                <div class="info-value">${equipo.capacidad}</div>
-                            </div>
-                        ` : ''}
-                        ${equipo.dimensiones ? `
-                            <div class="info-item">
-                                <div class="info-label">Dimensiones</div>
-                                <div class="info-value">${equipo.dimensiones}</div>
-                            </div>
-                        ` : ''}
-                        ${equipo.peso ? `
-                            <div class="info-item">
-                                <div class="info-label">Peso</div>
-                                <div class="info-value">${equipo.peso}</div>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            ` : ''}
-            
-            ${equipo.especificaciones ? `
-                <div class="form-section">
-                    <h3>📋 Especificaciones Adicionales</h3>
-                    <p>${equipo.especificaciones}</p>
-                </div>
-            ` : ''}
-            
-            ${equipo.observaciones ? `
-                <div class="form-section">
-                    <h3>📝 Observaciones</h3>
-                    <p>${equipo.observaciones}</p>
-                </div>
-            ` : ''}
+            ${it.potencia_motor || it.capacidad || it.dimensiones || it.peso ? `
+            <div class="equipo-preview" style="margin-top:1rem;">
+                <h4 style="margin-bottom:0.5rem;">Especificaciones</h4>
+                ${it.potencia_motor ? `<div class="info-row"><span>Potencia:</span> <strong>${it.potencia_motor}</strong></div>` : ''}
+                ${it.capacidad ? `<div class="info-row"><span>Capacidad:</span> <strong>${it.capacidad}</strong></div>` : ''}
+                ${it.dimensiones ? `<div class="info-row"><span>Dimensiones:</span> <strong>${it.dimensiones}</strong></div>` : ''}
+                ${it.peso ? `<div class="info-row"><span>Peso:</span> <strong>${it.peso}</strong></div>` : ''}
+            </div>` : ''}
+            ${it.especificaciones ? `<div class="equipo-preview" style="margin-top:1rem;"><p>${it.especificaciones}</p></div>` : ''}
+            ${it.observaciones ? `<div class="equipo-preview" style="margin-top:1rem;"><h4>Observaciones</h4><p>${it.observaciones}</p></div>` : ''}
         `;
-        
-        document.getElementById('modal-detalle').classList.add('active');
-        
-    } catch (error) {
-        console.error('Error cargando detalles:', error);
-        showNotification('Error al cargar los detalles del equipo', 'error');
+        openModal('modal-detalle');
+    } catch (e) {
+        notify('Error al cargar detalle: ' + e.message, 'error');
     }
 }
 
 // ===== VENTA =====
-async function openVentaModal(id) {
+async function openVenta(id) {
     try {
-        const response = await fetch(`${API_URL}/api/equipos/${id}`);
-        const equipo = await response.json();
-        
-        document.getElementById('venta-equipo-id').value = id;
-        
-        const equipoInfo = document.getElementById('venta-equipo-info');
-        equipoInfo.innerHTML = `
-            <div class="equipo-info-grid">
-                <div class="info-item">
-                    <div class="info-label">Equipo</div>
-                    <div class="info-value">${equipo.nombre}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Código</div>
-                    <div class="info-value">${equipo.codigo}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Precio de Lista</div>
-                    <div class="info-value text-primary">${formatMoney(equipo.precio_lista)}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Precio Mínimo</div>
-                    <div class="info-value text-warning">${formatMoney(equipo.precio_minimo)}</div>
-                </div>
-            </div>
+        const r = await fetch(`${API}/api/inventario/${id}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const it = await r.json();
+
+        document.getElementById('venta-inv-id').value = id;
+        document.getElementById('venta-equipo-info').innerHTML = `
+            <div class="info-row"><strong>${it.equipo_codigo}</strong> - ${it.equipo_nombre}</div>
+            <div class="info-row"><span>Precio Lista:</span> <strong class="text-success">${money(it.precio_lista)}</strong> |
+                <span>Precio Min:</span> <strong class="text-warning">${money(it.precio_minimo)}</strong></div>
         `;
-        
-        // Guardar precios en dataset para validación
-        const ventaPrecio = document.getElementById('venta-precio');
-        ventaPrecio.dataset.precioLista = equipo.precio_lista;
-        ventaPrecio.dataset.precioMinimo = equipo.precio_minimo;
-        ventaPrecio.value = equipo.precio_lista;
-        
-        // Reset form
+        document.getElementById('venta-precio').value = it.precio_lista || 0;
         document.getElementById('form-venta').reset();
-        document.getElementById('venta-equipo-id').value = id;
-        document.getElementById('venta-precio').value = equipo.precio_lista;
-        
-        updateVentaPrecioInfo();
-        
-        document.getElementById('modal-venta').classList.add('active');
-        
-    } catch (error) {
-        console.error('Error abriendo modal de venta:', error);
-        showNotification('Error al abrir el formulario de venta', 'error');
+        document.getElementById('venta-inv-id').value = id;
+        document.getElementById('venta-precio').value = it.precio_lista || 0;
+        openModal('modal-venta');
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
     }
 }
 
-function updateVentaPrecioInfo() {
-    const ventaPrecio = document.getElementById('venta-precio');
-    const precioLista = parseFloat(ventaPrecio.dataset.precioLista);
-    const precioMinimo = parseFloat(ventaPrecio.dataset.precioMinimo);
-    const precioVenta = parseFloat(ventaPrecio.value) || 0;
-    
-    const descuento = precioLista - precioVenta;
-    const descuentoPct = (descuento / precioLista * 100).toFixed(1);
-    
-    const infoElement = document.getElementById('venta-precio-info');
-    const autorizacionDiv = document.getElementById('venta-autorizacion');
-    
-    if (precioVenta < precioMinimo) {
-        infoElement.innerHTML = `⚠️ Precio menor al mínimo. Descuento: ${descuentoPct}%. Requiere autorización.`;
-        infoElement.className = 'text-danger';
-        autorizacionDiv.style.display = 'block';
-    } else if (precioVenta < precioLista) {
-        infoElement.innerHTML = `ℹ️ Descuento: ${descuentoPct}%`;
-        infoElement.className = 'text-warning';
-        autorizacionDiv.style.display = 'none';
-    } else {
-        infoElement.innerHTML = `✅ Precio de lista`;
-        infoElement.className = 'text-success';
-        autorizacionDiv.style.display = 'none';
+// ===== VENTAS =====
+async function loadVentas() {
+    try {
+        const r = await fetch(`${API}/api/ventas`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        ventasData = Array.isArray(data) ? data : [];
+        renderVentas();
+    } catch (e) {
+        document.getElementById('ventas-tbody').innerHTML =
+            `<tr><td colspan="7" class="loading">Error: ${e.message}</td></tr>`;
     }
 }
 
-async function submitVenta() {
-    const equipoId = document.getElementById('venta-equipo-id').value;
-    const precioVenta = parseFloat(document.getElementById('venta-precio').value);
-    const precioMinimo = parseFloat(document.getElementById('venta-precio').dataset.precioMinimo);
-    
-    const data = {
-        vendedor: document.getElementById('venta-vendedor').value,
-        cliente_nombre: document.getElementById('venta-cliente').value,
-        cliente_contacto: document.getElementById('venta-contacto').value,
-        cliente_rfc: document.getElementById('venta-rfc').value,
-        cliente_direccion: document.getElementById('venta-direccion').value,
-        precio_venta: precioVenta,
-        forma_pago: document.getElementById('venta-forma-pago').value,
-        motivo_descuento: document.getElementById('venta-motivo').value,
-        notas: document.getElementById('venta-notas').value
-    };
-    
-    // Si requiere autorización
-    if (precioVenta < precioMinimo) {
-        data.password_gerente = document.getElementById('venta-password').value;
-        
-        if (!data.password_gerente) {
-            showNotification('❌ Ingrese la contraseña de gerente', 'error');
+function renderVentas() {
+    const tbody = document.getElementById('ventas-tbody');
+    if (ventasData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">No hay ventas registradas</td></tr>';
+        return;
+    }
+    tbody.innerHTML = ventasData.map(v => `<tr>
+        <td>${formatDate(v.fecha_venta)}</td>
+        <td><strong>${v.equipo_codigo || ''}</strong> ${v.equipo_nombre || ''}</td>
+        <td>${v.cliente_nombre}</td>
+        <td>${v.vendedor}</td>
+        <td class="text-right font-bold">${money(v.precio_venta)}</td>
+        <td>${v.forma_pago || '-'}</td>
+        <td>${v.facturado ? '<span class="badge badge-si">Si</span>' : '<span class="badge badge-no">No</span>'}</td>
+    </tr>`).join('');
+}
+
+// ===== VENDEDORES =====
+async function loadVendedores() {
+    try {
+        const r = await fetch(`${API}/api/vendedores`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        const tbody = document.getElementById('vendedores-tbody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="loading">Sin datos aun - registra ventas para ver el tablero</td></tr>';
             return;
         }
+        tbody.innerHTML = data.map(v => {
+            let medal = '';
+            if (v.posicion === 1) medal = '<span class="medal">&#129351;</span> ';
+            else if (v.posicion === 2) medal = '<span class="medal">&#129352;</span> ';
+            else if (v.posicion === 3) medal = '<span class="medal">&#129353;</span> ';
+            return `<tr>
+                <td><strong>${v.posicion}</strong></td>
+                <td>${medal}${v.vendedor}</td>
+                <td class="text-right">${v.total_ventas}</td>
+                <td class="text-right font-bold">${money(v.ingreso_total)}</td>
+                <td class="text-right">${money(v.ingreso_iva)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        document.getElementById('vendedores-tbody').innerHTML =
+            `<tr><td colspan="5" class="loading">Error: ${e.message}</td></tr>`;
     }
-    
-    try {
-        const response = await fetch(`${API_URL}/api/equipos/${equipoId}/vender`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showNotification(`✅ Venta registrada exitosamente. N° Serie: ${result.numero_serie}`, 'success');
-            closeAllModals();
-            await loadInventory();
-            await loadSales();
-            await loadDashboard();
-        } else {
-            showNotification(`❌ ${result.error}`, 'error');
+}
+
+// ===== FORMS =====
+function setupForms() {
+    // Catalogo form
+    document.getElementById('form-catalogo').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const body = {
+                codigo: document.getElementById('cat-codigo').value,
+                nombre: document.getElementById('cat-nombre').value,
+                marca: document.getElementById('cat-marca').value,
+                modelo: document.getElementById('cat-modelo').value,
+                categoria: document.getElementById('cat-categoria').value,
+                precio_lista: parseFloat(document.getElementById('cat-precio-lista').value) || 0,
+                precio_minimo: parseFloat(document.getElementById('cat-precio-minimo').value) || 0,
+                precio_costo: parseFloat(document.getElementById('cat-precio-costo').value) || 0,
+                potencia_motor: document.getElementById('cat-potencia').value,
+                capacidad: document.getElementById('cat-capacidad').value,
+                dimensiones: document.getElementById('cat-dimensiones').value,
+                peso: document.getElementById('cat-peso').value,
+                especificaciones: document.getElementById('cat-especificaciones').value,
+                descripcion: document.getElementById('cat-descripcion').value
+            };
+            const r = await fetch(`${API}/api/equipos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const res = await r.json();
+            if (res.success) {
+                notify('Equipo agregado al catalogo', 'success');
+                document.getElementById('form-catalogo').reset();
+                loadCatalogo();
+            } else {
+                notify(res.error || 'Error', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
         }
-        
-    } catch (error) {
-        console.error('Error registrando venta:', error);
-        showNotification('❌ Error al registrar la venta', 'error');
-    }
-}
+    });
 
-// ===== UTILIDADES =====
-function formatMoney(amount) {
-    return new Intl.NumberFormat('es-MX', {
-        style: 'currency',
-        currency: 'MXN'
-    }).format(amount || 0);
-}
+    // Inventario form
+    document.getElementById('inv-equipo').addEventListener('change', (e) => {
+        const id = parseInt(e.target.value);
+        const preview = document.getElementById('inv-equipo-info');
+        if (!id) { preview.style.display = 'none'; return; }
+        const eq = equiposCatalogo.find(x => x.id === id);
+        if (eq) {
+            preview.style.display = 'block';
+            preview.innerHTML = `
+                <div class="info-row"><strong>${eq.codigo}</strong> - ${eq.nombre}</div>
+                <div class="info-row"><span>Marca:</span> <strong>${eq.marca || '-'}</strong> | <span>Modelo:</span> <strong>${eq.modelo || '-'}</strong></div>
+                <div class="info-row"><span>Precio Lista:</span> <strong>${money(eq.precio_lista)}</strong> | <span>Categoria:</span> <strong>${eq.categoria || '-'}</strong></div>
+            `;
+        }
+    });
 
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-MX', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
+    document.getElementById('form-inventario').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const body = {
+                equipo_id: parseInt(document.getElementById('inv-equipo').value),
+                numero_serie: document.getElementById('inv-serie').value,
+                estado: document.getElementById('inv-estado').value,
+                observaciones: document.getElementById('inv-obs').value
+            };
+            if (!body.equipo_id) { notify('Selecciona un equipo', 'error'); return; }
+            const r = await fetch(`${API}/api/inventario`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const res = await r.json();
+            if (res.success) {
+                notify('Agregado al inventario', 'success');
+                document.getElementById('form-inventario').reset();
+                document.getElementById('inv-equipo-info').style.display = 'none';
+                loadInventario();
+                loadDashboard();
+            } else {
+                notify(res.error || 'Error', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        }
+    });
+
+    // Venta form
+    document.getElementById('venta-facturado').addEventListener('change', (e) => {
+        document.getElementById('factura-num-group').style.display = e.target.value === 'true' ? 'block' : 'none';
+    });
+
+    document.getElementById('form-venta').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const invId = document.getElementById('venta-inv-id').value;
+            const body = {
+                vendedor: document.getElementById('venta-vendedor').value,
+                cliente_nombre: document.getElementById('venta-cliente').value,
+                cliente_contacto: document.getElementById('venta-contacto').value,
+                cliente_rfc: document.getElementById('venta-rfc').value,
+                cliente_direccion: document.getElementById('venta-direccion').value,
+                precio_venta: parseFloat(document.getElementById('venta-precio').value) || 0,
+                forma_pago: document.getElementById('venta-forma-pago').value,
+                facturado: document.getElementById('venta-facturado').value === 'true',
+                numero_factura: document.getElementById('venta-num-factura').value,
+                notas: document.getElementById('venta-notas').value
+            };
+            const r = await fetch(`${API}/api/inventario/${invId}/vender`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const res = await r.json();
+            if (res.success) {
+                notify('Venta registrada exitosamente', 'success');
+                closeModal('modal-venta');
+                loadInventario();
+                loadVentas();
+                loadDashboard();
+                loadVendedores();
+            } else {
+                notify(res.error || 'Error', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        }
     });
 }
 
-function showNotification(message, type = 'info') {
-    // Crear elemento de notificación
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 1rem 1.5rem;
-        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
-        color: white;
-        border-radius: 0.5rem;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        z-index: 9999;
-        max-width: 400px;
-        animation: slideIn 0.3s ease-out;
-    `;
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-in';
-        setTimeout(() => {
-            document.body.removeChild(notification);
-        }, 300);
-    }, 4000);
+// ===== MODALS =====
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+// ===== UTILS =====
+function money(v) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v || 0);
 }
 
-// Agregar estilos de animación
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
+function formatDate(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function badgeEstado(estado) {
+    const map = {
+        'Disponible': 'badge-disponible',
+        'Vendida': 'badge-vendida',
+        'En Fabricacion': 'badge-fabricacion',
+        'En Planta 1': 'badge-planta1',
+        'En Planta 2': 'badge-planta2',
+        'No Disponible': 'badge-no-disponible',
+        'Anticipo': 'badge-anticipo',
+        'En Cotizacion': 'badge-cotizacion',
+        'Apartada': 'badge-apartada'
+    };
+    return `<span class="badge ${map[estado] || 'badge-disponible'}">${estado}</span>`;
+}
+
+function notify(msg, type) {
+    const el = document.createElement('div');
+    el.className = `notification ${type || 'info'}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => {
+        el.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => el.remove(), 300);
+    }, 4000);
+}
