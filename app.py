@@ -3,25 +3,29 @@ from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
+from decimal import Decimal
 import os
+import json
 
 app = Flask(__name__, static_folder='frontend')
 CORS(app)
 
-# Configuración de PostgreSQL
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://durtron:RBYwTg26IgSlKJN8giieAhUmylzpTzn6@dpg-d66b4d6sb7us73clsr7g-a/durtron')
 
-def get_db_connection():
-    """Obtener conexión a PostgreSQL"""
+MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+def get_db():
     if not DATABASE_URL:
         raise Exception("DATABASE_URL no configurada")
-    
-    # Render usa postgres:// pero psycopg2 necesita postgresql://
     url = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     return psycopg2.connect(url, cursor_factory=RealDictCursor)
 
-# ==================== RUTAS ESTÁTICAS ====================
+def decimal_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError
 
+# ==================== RUTAS ESTATICAS ====================
 @app.route('/')
 def index():
     return send_from_directory('frontend', 'index.html')
@@ -30,304 +34,351 @@ def index():
 def static_files(path):
     return send_from_directory('frontend', path)
 
-# ==================== API - CONFIGURACIÓN ====================
-
-@app.route('/api/config', methods=['GET'])
+# ==================== CONFIGURACION ====================
+@app.route('/api/config')
 def get_config():
-    """Obtener configuración de estados, ubicaciones, etc."""
-    config = {
-        'estados': [
-            'Disponible',
-            'Apartada',
-            'Vendida',
-            'En Tránsito',
-            'En Reparación',
-            'No Disponible'
-        ],
-        'ubicaciones': [
-            'Bodega Principal',
-            'Piso de Venta',
-            'Bodega 2',
-            'En Tránsito',
-            'Cliente'
+    return jsonify({
+        'estados_inventario': [
+            'Disponible', 'En Fabricacion', 'En Planta 1', 'En Planta 2',
+            'No Disponible', 'Anticipo', 'En Cotizacion', 'Apartada'
         ],
         'categorias': [
-            'Quebradoras',
-            'Molinos',
-            'Cribas',
-            'Bandas Transportadoras',
-            'Equipos Auxiliares',
-            'Otro'
+            'Quebradoras', 'Molinos', 'Cribas', 'Bandas Transportadoras',
+            'Equipos Auxiliares', 'Refacciones', 'Otro'
         ],
         'formas_pago': [
-            'Contado',
-            'Crédito 30 días',
-            'Crédito 60 días',
-            'Crédito 90 días',
-            'Anticipo + Contraentrega',
-            'Otro'
+            'Contado', 'Credito 30 dias', 'Credito 60 dias', 'Credito 90 dias',
+            'Anticipo + Contraentrega', 'Transferencia', 'Otro'
         ]
-    }
-    return jsonify(config)
+    })
 
-# ==================== API - DASHBOARD ====================
-
-@app.route('/api/dashboard', methods=['GET'])
+# ==================== DASHBOARD ====================
+@app.route('/api/dashboard')
 def get_dashboard():
-    """Obtener estadísticas del dashboard"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Total de equipos
-        cursor.execute('SELECT COUNT(*) as total FROM equipos')
-        total_equipos = cursor.fetchone()['total']
-        
-        # Equipos disponibles
-        cursor.execute("SELECT COUNT(*) as total FROM equipos WHERE estado = 'Disponible'")
-        equipos_disponibles = cursor.fetchone()['total']
-        
-        # Total de ventas
-        cursor.execute('SELECT COUNT(*) as total FROM ventas')
-        total_ventas = cursor.fetchone()['total']
-        
-        # Ingresos totales
-        cursor.execute('SELECT COALESCE(SUM(precio_venta), 0) as total FROM ventas')
-        ingresos_totales = cursor.fetchone()['total']
-        
-        cursor.close()
+        year = request.args.get('year', datetime.now().year, type=int)
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute('SELECT COUNT(*) as total FROM equipos')
+        total_catalogo = cur.fetchone()['total']
+
+        cur.execute('SELECT COUNT(*) as total FROM inventario')
+        total_inventario = cur.fetchone()['total']
+
+        cur.execute("SELECT COUNT(*) as total FROM inventario WHERE estado = 'Disponible'")
+        inv_disponible = cur.fetchone()['total']
+
+        # Ventas del anio
+        cur.execute('SELECT COUNT(*) as cnt, COALESCE(SUM(precio_venta),0) as total FROM ventas WHERE EXTRACT(YEAR FROM fecha_venta)=%s', (year,))
+        row = cur.fetchone()
+        ventas_anio_cnt = row['cnt']
+        ventas_anio_neto = float(row['total'])
+
+        # Mensual
+        cur.execute('''
+            SELECT EXTRACT(MONTH FROM fecha_venta)::int as mes,
+                   COUNT(*) as cnt,
+                   COALESCE(SUM(precio_venta),0) as neto
+            FROM ventas
+            WHERE EXTRACT(YEAR FROM fecha_venta)=%s
+            GROUP BY mes ORDER BY mes
+        ''', (year,))
+        rows = cur.fetchall()
+        monthly = {}
+        for r in rows:
+            monthly[r['mes']] = {'total_ventas': r['cnt'], 'ingreso_neto': float(r['neto'])}
+
+        meses_data = []
+        for m in range(1, 13):
+            d = monthly.get(m, {'total_ventas': 0, 'ingreso_neto': 0.0})
+            meses_data.append({
+                'mes': m,
+                'nombre': MESES[m-1],
+                'total_ventas': d['total_ventas'],
+                'ingreso_neto': d['ingreso_neto'],
+                'ingreso_iva': round(d['ingreso_neto'] * 1.16, 2)
+            })
+
+        # Trimestral
+        trimestres = []
+        for q in range(4):
+            start = q * 3
+            t = {'trimestre': q+1, 'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0}
+            for i in range(3):
+                t['total_ventas'] += meses_data[start+i]['total_ventas']
+                t['ingreso_neto'] += meses_data[start+i]['ingreso_neto']
+            t['ingreso_iva'] = round(t['ingreso_neto'] * 1.16, 2)
+            t['ingreso_neto'] = round(t['ingreso_neto'], 2)
+            trimestres.append(t)
+
+        cur.close()
         conn.close()
-        
+
         return jsonify({
-            'total_equipos': total_equipos,
-            'equipos_disponibles': equipos_disponibles,
-            'total_ventas': total_ventas,
-            'ingresos_totales': float(ingresos_totales) if ingresos_totales else 0
+            'total_catalogo': total_catalogo,
+            'total_inventario': total_inventario,
+            'inv_disponible': inv_disponible,
+            'ventas_anio': ventas_anio_cnt,
+            'ingreso_neto_anio': ventas_anio_neto,
+            'ingreso_iva_anio': round(ventas_anio_neto * 1.16, 2),
+            'mensual': meses_data,
+            'trimestral': trimestres,
+            'year': year
         })
     except Exception as e:
-        print(f"Error en dashboard: {str(e)}")
+        print(f"Error dashboard: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== API - EQUIPOS ====================
-
-@app.route('/api/equipos', methods=['GET'])
+# ==================== CATALOGO DE EQUIPOS ====================
+@app.route('/api/equipos')
 def get_equipos():
-    """Obtener todos los equipos"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM equipos 
-            ORDER BY fecha_creacion DESC
-        ''')
-        
-        equipos = cursor.fetchall()
-        cursor.close()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM equipos ORDER BY nombre ASC')
+        data = cur.fetchall()
+        cur.close()
         conn.close()
-        
-        return jsonify(equipos)
+        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
     except Exception as e:
-        print(f"Error al obtener equipos: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/equipos', methods=['POST'])
 def create_equipo():
-    """Crear nuevo equipo"""
     try:
-        data = request.json
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO equipos (
-                codigo, nombre, marca, modelo, numero_serie,
-                descripcion, categoria, precio_lista, precio_minimo, precio_costo,
-                ubicacion, estado, cantidad_disponible,
-                especificaciones, potencia_motor, capacidad,
-                dimensiones, peso, observaciones,
-                fecha_creacion
-            ) VALUES (
-                %(codigo)s, %(nombre)s, %(marca)s, %(modelo)s, %(numero_serie)s,
-                %(descripcion)s, %(categoria)s, %(precio_lista)s, %(precio_minimo)s, %(precio_costo)s,
-                %(ubicacion)s, %(estado)s, %(cantidad_disponible)s,
-                %(especificaciones)s, %(potencia_motor)s, %(capacidad)s,
-                %(dimensiones)s, %(peso)s, %(observaciones)s,
-                CURRENT_TIMESTAMP
-            ) RETURNING id
-        ''', data)
-        
-        equipo_id = cursor.fetchone()['id']
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO equipos (codigo, nombre, marca, modelo, descripcion, categoria,
+                precio_lista, precio_minimo, precio_costo,
+                potencia_motor, capacidad, dimensiones, peso, especificaciones)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        ''', (
+            d.get('codigo',''), d.get('nombre',''), d.get('marca',''), d.get('modelo',''),
+            d.get('descripcion',''), d.get('categoria',''),
+            d.get('precio_lista', 0), d.get('precio_minimo', 0), d.get('precio_costo', 0),
+            d.get('potencia_motor',''), d.get('capacidad',''), d.get('dimensiones',''),
+            d.get('peso',''), d.get('especificaciones','')
+        ))
+        eid = cur.fetchone()['id']
         conn.commit()
-        cursor.close()
+        cur.close()
         conn.close()
-        
-        return jsonify({'id': equipo_id, 'message': 'Equipo creado exitosamente'}), 201
+        return jsonify({'success': True, 'id': eid, 'message': 'Equipo agregado al catalogo'})
     except Exception as e:
-        print(f"Error al crear equipo: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/equipos/<int:equipo_id>', methods=['GET'])
-def get_equipo(equipo_id):
-    """Obtener un equipo específico"""
+@app.route('/api/equipos/<int:eid>')
+def get_equipo(eid):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM equipos WHERE id = %s', (equipo_id,))
-        equipo = cursor.fetchone()
-        
-        cursor.close()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM equipos WHERE id=%s', (eid,))
+        eq = cur.fetchone()
+        cur.close()
         conn.close()
-        
-        if equipo:
-            return jsonify(equipo)
-        return jsonify({'error': 'Equipo no encontrado'}), 404
+        if eq:
+            return json.dumps(eq, default=decimal_default), 200, {'Content-Type': 'application/json'}
+        return jsonify({'error': 'No encontrado'}), 404
     except Exception as e:
-        print(f"Error al obtener equipo: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/equipos/<int:equipo_id>', methods=['PUT'])
-def update_equipo(equipo_id):
-    """Actualizar un equipo"""
+@app.route('/api/equipos/<int:eid>', methods=['DELETE'])
+def delete_equipo(eid):
     try:
-        data = request.json
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE equipos SET
-                codigo = %(codigo)s,
-                nombre = %(nombre)s,
-                marca = %(marca)s,
-                modelo = %(modelo)s,
-                numero_serie = %(numero_serie)s,
-                descripcion = %(descripcion)s,
-                categoria = %(categoria)s,
-                precio_lista = %(precio_lista)s,
-                precio_minimo = %(precio_minimo)s,
-                precio_costo = %(precio_costo)s,
-                ubicacion = %(ubicacion)s,
-                estado = %(estado)s,
-                cantidad_disponible = %(cantidad_disponible)s,
-                especificaciones = %(especificaciones)s,
-                potencia_motor = %(potencia_motor)s,
-                capacidad = %(capacidad)s,
-                dimensiones = %(dimensiones)s,
-                peso = %(peso)s,
-                observaciones = %(observaciones)s,
-                fecha_actualizacion = CURRENT_TIMESTAMP
-            WHERE id = %(id)s
-        ''', {**data, 'id': equipo_id})
-        
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM equipos WHERE id=%s', (eid,))
         conn.commit()
-        cursor.close()
+        cur.close()
         conn.close()
-        
-        return jsonify({'message': 'Equipo actualizado exitosamente'})
+        return jsonify({'success': True, 'message': 'Equipo eliminado del catalogo'})
     except Exception as e:
-        print(f"Error al actualizar equipo: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/equipos/<int:equipo_id>', methods=['DELETE'])
-def delete_equipo(equipo_id):
-    """Eliminar un equipo"""
+# ==================== INVENTARIO ====================
+@app.route('/api/inventario')
+def get_inventario():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM equipos WHERE id = %s', (equipo_id,))
-        conn.commit()
-        
-        cursor.close()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT i.*, e.codigo as equipo_codigo, e.nombre as equipo_nombre,
+                   e.marca, e.modelo, e.categoria, e.precio_lista, e.precio_minimo, e.precio_costo
+            FROM inventario i
+            JOIN equipos e ON i.equipo_id = e.id
+            ORDER BY i.fecha_creacion DESC
+        ''')
+        data = cur.fetchall()
+        cur.close()
         conn.close()
-        
-        return jsonify({'message': 'Equipo eliminado exitosamente'})
+        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
     except Exception as e:
-        print(f"Error al eliminar equipo: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== API - VENTAS ====================
+@app.route('/api/inventario', methods=['POST'])
+def create_inventario():
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO inventario (equipo_id, numero_serie, estado, observaciones)
+            VALUES (%s,%s,%s,%s) RETURNING id
+        ''', (
+            d.get('equipo_id'), d.get('numero_serie',''),
+            d.get('estado','Disponible'), d.get('observaciones','')
+        ))
+        iid = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': iid, 'message': 'Agregado al inventario'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/ventas', methods=['GET'])
+@app.route('/api/inventario/<int:iid>')
+def get_inv_item(iid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT i.*, e.codigo as equipo_codigo, e.nombre as equipo_nombre,
+                   e.marca, e.modelo, e.categoria, e.precio_lista, e.precio_minimo,
+                   e.precio_costo, e.potencia_motor, e.capacidad, e.dimensiones,
+                   e.peso, e.especificaciones, e.descripcion
+            FROM inventario i JOIN equipos e ON i.equipo_id = e.id
+            WHERE i.id=%s
+        ''', (iid,))
+        item = cur.fetchone()
+        cur.close()
+        conn.close()
+        if item:
+            return json.dumps(item, default=decimal_default), 200, {'Content-Type': 'application/json'}
+        return jsonify({'error': 'No encontrado'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/inventario/<int:iid>/vender', methods=['POST'])
+def vender_item(iid):
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Obtener info del inventario
+        cur.execute('SELECT * FROM inventario WHERE id=%s', (iid,))
+        inv = cur.fetchone()
+        if not inv:
+            return jsonify({'error': 'Item de inventario no encontrado'}), 404
+
+        precio_venta = float(d.get('precio_venta', 0))
+        precio_lista = 0
+        cur.execute('SELECT precio_lista FROM equipos WHERE id=%s', (inv['equipo_id'],))
+        eq = cur.fetchone()
+        if eq:
+            precio_lista = float(eq['precio_lista'])
+
+        descuento_monto = precio_lista - precio_venta if precio_lista > precio_venta else 0
+        descuento_pct = (descuento_monto / precio_lista * 100) if precio_lista > 0 else 0
+
+        cur.execute('''
+            INSERT INTO ventas (inventario_id, equipo_id, vendedor, cliente_nombre,
+                cliente_contacto, cliente_rfc, cliente_direccion, precio_venta,
+                descuento_monto, descuento_porcentaje, motivo_descuento,
+                forma_pago, facturado, numero_factura, autorizado_por, notas)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        ''', (
+            iid, inv['equipo_id'], d.get('vendedor',''),
+            d.get('cliente_nombre',''), d.get('cliente_contacto',''),
+            d.get('cliente_rfc',''), d.get('cliente_direccion',''),
+            precio_venta, descuento_monto, round(descuento_pct, 2),
+            d.get('motivo_descuento',''), d.get('forma_pago',''),
+            d.get('facturado', False), d.get('numero_factura',''),
+            d.get('autorizado_por',''), d.get('notas','')
+        ))
+        vid = cur.fetchone()['id']
+
+        # Marcar inventario como vendida
+        cur.execute("UPDATE inventario SET estado='Vendida' WHERE id=%s", (iid,))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': vid, 'message': 'Venta registrada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== VENTAS ====================
+@app.route('/api/ventas')
 def get_ventas():
-    """Obtener todas las ventas"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT v.*, e.nombre as equipo_nombre, e.modelo as equipo_modelo
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT v.*, e.nombre as equipo_nombre, e.codigo as equipo_codigo,
+                   e.modelo as equipo_modelo, i.numero_serie
             FROM ventas v
             LEFT JOIN equipos e ON v.equipo_id = e.id
+            LEFT JOIN inventario i ON v.inventario_id = i.id
             ORDER BY v.fecha_venta DESC
         ''')
-        
-        ventas = cursor.fetchall()
-        cursor.close()
+        data = cur.fetchall()
+        cur.close()
         conn.close()
-        
-        return jsonify(ventas)
+        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
     except Exception as e:
-        print(f"Error al obtener ventas: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/ventas', methods=['POST'])
-def create_venta():
-    """Registrar una venta"""
+# ==================== VENDEDORES ====================
+@app.route('/api/vendedores')
+def get_vendedores():
     try:
-        data = request.json
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Insertar venta
-        cursor.execute('''
-            INSERT INTO ventas (
-                equipo_id, vendedor, cliente_nombre, cliente_contacto,
-                cliente_rfc, cliente_direccion, precio_venta,
-                descuento_monto, descuento_porcentaje, motivo_descuento,
-                forma_pago, autorizado_por, numero_serie, notas
-            ) VALUES (
-                %(equipo_id)s, %(vendedor)s, %(cliente_nombre)s, %(cliente_contacto)s,
-                %(cliente_rfc)s, %(cliente_direccion)s, %(precio_venta)s,
-                %(descuento_monto)s, %(descuento_porcentaje)s, %(motivo_descuento)s,
-                %(forma_pago)s, %(autorizado_por)s, %(numero_serie)s, %(notas)s
-            ) RETURNING id
-        ''', data)
-        
-        venta_id = cursor.fetchone()['id']
-        
-        # Actualizar estado del equipo a "Vendida"
-        cursor.execute('''
-            UPDATE equipos 
-            SET estado = 'Vendida', 
-                cantidad_disponible = 0,
-                fecha_actualizacion = CURRENT_TIMESTAMP
-            WHERE id = %s
-        ''', (data['equipo_id'],))
-        
-        conn.commit()
-        cursor.close()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT vendedor,
+                   COUNT(*) as total_ventas,
+                   COALESCE(SUM(precio_venta),0) as ingreso_total
+            FROM ventas
+            GROUP BY vendedor
+            ORDER BY ingreso_total DESC
+        ''')
+        data = cur.fetchall()
+        cur.close()
         conn.close()
-        
-        return jsonify({'id': venta_id, 'message': 'Venta registrada exitosamente'}), 201
+        result = []
+        for i, r in enumerate(data):
+            result.append({
+                'posicion': i + 1,
+                'vendedor': r['vendedor'],
+                'total_ventas': r['total_ventas'],
+                'ingreso_total': float(r['ingreso_total']),
+                'ingreso_iva': round(float(r['ingreso_total']) * 1.16, 2)
+            })
+        return jsonify(result)
     except Exception as e:
-        print(f"Error al crear venta: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== VERIFICACIÓN DE SALUD ====================
+# ==================== ADMIN ====================
+@app.route('/api/init-db', methods=['POST'])
+def init_database():
+    try:
+        import init_db
+        init_db.init_db()
+        return jsonify({'success': True, 'message': 'Base de datos inicializada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
 def health():
-    """Endpoint de verificación de salud"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT 1')
-        cursor.close()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT 1')
+        cur.close()
         conn.close()
         return jsonify({'status': 'healthy', 'database': 'connected'})
     except Exception as e:
