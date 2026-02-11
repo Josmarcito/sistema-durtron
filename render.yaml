@@ -11,3 +11,9 @@ services:
         value: 3.11.0
       - key: FLASK_ENV
         value: production
+
+databases:
+  - name: durtron-db
+    databaseName: durtron
+    user: durtron
+    plan: free
