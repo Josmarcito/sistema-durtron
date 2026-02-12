@@ -26,15 +26,8 @@ def init_db():
         print(f"ERROR al conectar: {e}")
         sys.exit(1)
 
-    # Limpiar tablas anteriores
-    print("Limpiando tablas anteriores...")
-    cursor.execute("DROP TABLE IF EXISTS ventas CASCADE")
-    cursor.execute("DROP TABLE IF EXISTS inventario CASCADE")
-    cursor.execute("DROP TABLE IF EXISTS cotizaciones CASCADE")
-    cursor.execute("DROP TABLE IF EXISTS alertas_precio CASCADE")
-    cursor.execute("DROP TABLE IF EXISTS movimientos CASCADE")
-    cursor.execute("DROP TABLE IF EXISTS equipos CASCADE")
-    print("Tablas anteriores eliminadas")
+    # Solo crear tablas si no existen (NO borrar datos existentes)
+    print("Verificando tablas...")
 
     # Tabla equipos = Catalogo de productos
     print("Creando tabla 'equipos' (catalogo)...")
@@ -102,12 +95,52 @@ def init_db():
     ''')
     print("  OK tabla 'ventas'")
 
+    # Tabla cotizaciones
+    print("Creando tabla 'cotizaciones'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cotizaciones (
+            id SERIAL PRIMARY KEY,
+            folio VARCHAR(20) UNIQUE NOT NULL,
+            cliente_nombre VARCHAR(255) NOT NULL,
+            cliente_empresa VARCHAR(255),
+            cliente_telefono VARCHAR(50),
+            cliente_email VARCHAR(100),
+            cliente_direccion TEXT,
+            vendedor VARCHAR(100) NOT NULL,
+            incluye_iva BOOLEAN DEFAULT TRUE,
+            subtotal DECIMAL(12, 2) DEFAULT 0,
+            iva DECIMAL(12, 2) DEFAULT 0,
+            total DECIMAL(12, 2) DEFAULT 0,
+            vigencia_dias INTEGER DEFAULT 7,
+            notas TEXT,
+            estado VARCHAR(20) DEFAULT 'Activa',
+            fecha_cotizacion DATE DEFAULT CURRENT_DATE,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'cotizaciones'")
+
+    # Tabla items de cotizacion
+    print("Creando tabla 'cotizacion_items'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cotizacion_items (
+            id SERIAL PRIMARY KEY,
+            cotizacion_id INTEGER NOT NULL REFERENCES cotizaciones(id) ON DELETE CASCADE,
+            equipo_id INTEGER REFERENCES equipos(id),
+            descripcion VARCHAR(500) NOT NULL,
+            cantidad INTEGER DEFAULT 1,
+            precio_unitario DECIMAL(12, 2) NOT NULL,
+            total_linea DECIMAL(12, 2) NOT NULL
+        )
+    ''')
+    print("  OK tabla 'cotizacion_items'")
+
     conn.commit()
     cursor.close()
     conn.close()
     print("=" * 60)
     print("Base de datos inicializada correctamente")
-    print("Tablas: equipos, inventario, ventas")
+    print("Tablas: equipos, inventario, ventas, cotizaciones, cotizacion_items")
     print("=" * 60)
 
 if __name__ == '__main__':
