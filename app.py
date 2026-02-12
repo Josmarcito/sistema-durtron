@@ -504,6 +504,140 @@ def get_vendedores():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ==================== COTIZACIONES ====================
+@app.route('/api/cotizaciones')
+def get_cotizaciones():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT c.*, 
+                   (SELECT COUNT(*) FROM cotizacion_items ci WHERE ci.cotizacion_id = c.id) as num_items
+            FROM cotizaciones c
+            ORDER BY c.fecha_creacion DESC
+        ''')
+        data = cur.fetchall()
+        cur.close()
+        conn.close()
+        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cotizaciones', methods=['POST'])
+def create_cotizacion():
+    try:
+        d = request.json
+        if not d:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Generar folio automatico: COT-YYYY-NNNN
+        year = datetime.now().year
+        cur.execute("SELECT COUNT(*) as cnt FROM cotizaciones WHERE folio LIKE %s", (f'COT-{year}-%',))
+        count = cur.fetchone()['cnt'] + 1
+        folio = f'COT-{year}-{count:04d}'
+
+        items = d.get('items', [])
+        if not items:
+            return jsonify({'error': 'Debe agregar al menos un equipo'}), 400
+
+        incluye_iva = d.get('incluye_iva', True)
+        subtotal = 0
+        for item in items:
+            qty = int(item.get('cantidad', 1))
+            precio = float(item.get('precio_unitario', 0))
+            subtotal += qty * precio
+
+        iva = round(subtotal * 0.16, 2) if incluye_iva else 0
+        total = round(subtotal + iva, 2)
+
+        cur.execute('''
+            INSERT INTO cotizaciones (folio, cliente_nombre, cliente_empresa, cliente_telefono,
+                cliente_email, cliente_direccion, vendedor, incluye_iva,
+                subtotal, iva, total, vigencia_dias, notas)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        ''', (
+            folio,
+            d.get('cliente_nombre', ''),
+            d.get('cliente_empresa', ''),
+            d.get('cliente_telefono', ''),
+            d.get('cliente_email', ''),
+            d.get('cliente_direccion', ''),
+            d.get('vendedor', ''),
+            incluye_iva,
+            subtotal, iva, total,
+            d.get('vigencia_dias', 7),
+            d.get('notas', '')
+        ))
+        cot_id = cur.fetchone()['id']
+
+        for item in items:
+            qty = int(item.get('cantidad', 1))
+            precio = float(item.get('precio_unitario', 0))
+            total_linea = round(qty * precio, 2)
+            cur.execute('''
+                INSERT INTO cotizacion_items (cotizacion_id, equipo_id, descripcion, cantidad, precio_unitario, total_linea)
+                VALUES (%s,%s,%s,%s,%s,%s)
+            ''', (
+                cot_id,
+                item.get('equipo_id') or None,
+                item.get('descripcion', ''),
+                qty, precio, total_linea
+            ))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': cot_id, 'folio': folio, 'message': f'Cotizacion {folio} creada'})
+    except Exception as e:
+        print(f'Error creando cotizacion: {e}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cotizaciones/<int:cid>')
+def get_cotizacion(cid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM cotizaciones WHERE id=%s', (cid,))
+        cot = cur.fetchone()
+        if not cot:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Cotizacion no encontrada'}), 404
+
+        cur.execute('''
+            SELECT ci.*, e.codigo as equipo_codigo, e.nombre as equipo_nombre,
+                   e.marca, e.modelo, e.capacidad, e.potencia_motor
+            FROM cotizacion_items ci
+            LEFT JOIN equipos e ON ci.equipo_id = e.id
+            WHERE ci.cotizacion_id = %s
+            ORDER BY ci.id
+        ''', (cid,))
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        result = dict(cot)
+        result['items'] = [dict(i) for i in items]
+        return json.dumps(result, default=decimal_default), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cotizaciones/<int:cid>', methods=['DELETE'])
+def delete_cotizacion(cid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM cotizaciones WHERE id=%s', (cid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Cotizacion eliminada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ==================== ADMIN ====================
 @app.route('/api/init-db', methods=['POST'])
 def init_database():
