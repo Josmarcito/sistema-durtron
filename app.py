@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session, redirect
 from flask_cors import CORS
+from functools import wraps
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -8,9 +9,14 @@ import os
 import json
 
 app = Flask(__name__, static_folder='frontend')
-CORS(app)
+app.secret_key = os.environ.get('SECRET_KEY', 'durtron-secret-key-2024-cambiar')
+CORS(app, supports_credentials=True)
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://durtron:RBYwTg26IgSlKJN8giieAhUmylzpTzn6@dpg-d66b4d6sb7us73clsr7g-a/durtron')
+
+# Credenciales de acceso (puedes cambiarlas aqui o en variables de entorno de Render)
+AUTH_USER = os.environ.get('AUTH_USER', 'durtron')
+AUTH_PASS = os.environ.get('AUTH_PASS', 'durtron2024')
 
 MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -27,16 +33,70 @@ def decimal_default(obj):
         return obj.isoformat()
     raise TypeError
 
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            # Si es una peticion API, devolver 401
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'No autorizado'}), 401
+            # Si es una pagina, redirigir al login
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated
+
+# ==================== AUTH ====================
+@app.route('/login')
+def login_page():
+    return send_from_directory('frontend', 'login.html')
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    d = request.json or {}
+    user = d.get('usuario', '')
+    pwd = d.get('password', '')
+    if user == AUTH_USER and pwd == AUTH_PASS:
+        session['logged_in'] = True
+        session['usuario'] = user
+        return jsonify({'success': True, 'message': 'Acceso concedido'})
+    return jsonify({'error': 'Usuario o contraseña incorrecta'}), 401
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({'success': True, 'message': 'Sesion cerrada'})
+
+@app.route('/api/check-auth')
+def check_auth():
+    if session.get('logged_in'):
+        return jsonify({'authenticated': True, 'usuario': session.get('usuario')})
+    return jsonify({'authenticated': False}), 401
+
 # ==================== RUTAS ESTATICAS ====================
 @app.route('/')
+@login_required
 def index():
     return send_from_directory('frontend', 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):
+    # Permitir acceso a login.html y sus recursos sin autenticar
+    if path in ('login.html', 'style.css', 'logo.png'):
+        return send_from_directory('frontend', path)
+    if not session.get('logged_in'):
+        return redirect('/login')
     return send_from_directory('frontend', path)
 
 # ==================== CONFIGURACION ====================
+# Proteger todas las rutas /api/ excepto auth y health
+@app.before_request
+def check_auth_before():
+    open_paths = ('/api/login', '/api/logout', '/api/check-auth', '/api/init-db', '/health', '/login')
+    if request.path in open_paths or not request.path.startswith('/api/'):
+        return None
+    if not session.get('logged_in'):
+        return jsonify({'error': 'No autorizado'}), 401
+
 @app.route('/api/config')
 def get_config():
     return jsonify({
@@ -409,63 +469,3 @@ def delete_venta(vid):
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'success': True, 'message': 'Venta eliminada y equipo restaurado a inventario'})
-    except Exception as e:
-        print(f'Error eliminando venta: {e}')
-        return jsonify({'error': str(e)}), 500
-
-# ==================== VENDEDORES ====================
-@app.route('/api/vendedores')
-def get_vendedores():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('''
-            SELECT vendedor,
-                   COUNT(*) as total_ventas,
-                   COALESCE(SUM(precio_venta),0) as ingreso_total
-            FROM ventas
-            GROUP BY vendedor
-            ORDER BY ingreso_total DESC
-        ''')
-        data = cur.fetchall()
-        cur.close()
-        conn.close()
-        result = []
-        for i, r in enumerate(data):
-            result.append({
-                'posicion': i + 1,
-                'vendedor': r['vendedor'],
-                'total_ventas': r['total_ventas'],
-                'ingreso_total': float(r['ingreso_total']),
-                'ingreso_iva': round(float(r['ingreso_total']) * 1.16, 2)
-            })
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# ==================== ADMIN ====================
-@app.route('/api/init-db', methods=['POST'])
-def init_database():
-    try:
-        import init_db
-        init_db.init_db()
-        return jsonify({'success': True, 'message': 'Base de datos inicializada'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/health')
-def health():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('SELECT 1')
-        cur.close()
-        conn.close()
-        return jsonify({'status': 'healthy', 'database': 'connected'})
-    except Exception as e:
-        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
