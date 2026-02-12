@@ -469,3 +469,63 @@ def delete_venta(vid):
         conn.commit()
         cur.close()
         conn.close()
+        return jsonify({'success': True, 'message': 'Venta eliminada y equipo restaurado a inventario'})
+    except Exception as e:
+        print(f'Error eliminando venta: {e}')
+        return jsonify({'error': str(e)}), 500
+
+# ==================== VENDEDORES ====================
+@app.route('/api/vendedores')
+def get_vendedores():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT vendedor,
+                   COUNT(*) as total_ventas,
+                   COALESCE(SUM(precio_venta),0) as ingreso_total
+            FROM ventas
+            GROUP BY vendedor
+            ORDER BY ingreso_total DESC
+        ''')
+        data = cur.fetchall()
+        cur.close()
+        conn.close()
+        result = []
+        for i, r in enumerate(data):
+            result.append({
+                'posicion': i + 1,
+                'vendedor': r['vendedor'],
+                'total_ventas': r['total_ventas'],
+                'ingreso_total': float(r['ingreso_total']),
+                'ingreso_iva': round(float(r['ingreso_total']) * 1.16, 2)
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== ADMIN ====================
+@app.route('/api/init-db', methods=['POST'])
+def init_database():
+    try:
+        import init_db
+        init_db.init_db()
+        return jsonify({'success': True, 'message': 'Base de datos inicializada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/health')
+def health():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT 1')
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'healthy', 'database': 'connected'})
+    except Exception as e:
+        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
