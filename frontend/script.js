@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadInventario();
         loadVentas();
         loadVendedores();
+        loadCotizaciones();
     });
 });
 
@@ -39,6 +40,7 @@ function setupNav() {
             if (s === 'vendedores') loadVendedores();
             if (s === 'ventas') loadVentas();
             if (s === 'dashboard') loadDashboard();
+            if (s === 'cotizaciones') { loadCotizaciones(); populateCotEquipoSelects(); }
         });
     });
 }
@@ -588,4 +590,328 @@ function notify(msg, type) {
         el.style.animation = 'slideOut 0.3s ease-in';
         setTimeout(() => el.remove(), 300);
     }, 4000);
+}
+
+// ===== COTIZACIONES =====
+let cotizacionesData = [];
+
+async function loadCotizaciones() {
+    try {
+        const r = await fetch(`${API}/api/cotizaciones`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        cotizacionesData = Array.isArray(data) ? data : [];
+        renderCotizaciones();
+    } catch (e) {
+        document.getElementById('cotizaciones-tbody').innerHTML =
+            `<tr><td colspan="7" class="loading">Error: ${e.message}</td></tr>`;
+    }
+}
+
+function renderCotizaciones() {
+    const tbody = document.getElementById('cotizaciones-tbody');
+    if (cotizacionesData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">No hay cotizaciones</td></tr>';
+        return;
+    }
+    tbody.innerHTML = cotizacionesData.map(c => `<tr>
+        <td><strong>${c.folio}</strong></td>
+        <td>${formatDate(c.fecha_cotizacion)}</td>
+        <td>${c.cliente_nombre}${c.cliente_empresa ? ' - ' + c.cliente_empresa : ''}</td>
+        <td>${c.vendedor}</td>
+        <td class="text-right font-bold">${money(c.total)}</td>
+        <td>${c.incluye_iva ? '<span class="badge badge-si">Si</span>' : '<span class="badge badge-no">No</span>'}</td>
+        <td>
+            <div class="action-buttons">
+                <button class="btn btn-sm btn-primary" onclick="verCotizacion(${c.id})">Ver</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteCotizacion(${c.id})">Eliminar</button>
+            </div>
+        </td>
+    </tr>`).join('');
+}
+
+function populateCotEquipoSelects() {
+    document.querySelectorAll('.cot-equipo-select').forEach(sel => {
+        const val = sel.value;
+        sel.innerHTML = '<option value="">Seleccionar equipo...</option>';
+        equiposCatalogo.forEach(eq => {
+            const opt = document.createElement('option');
+            opt.value = eq.id;
+            opt.textContent = `${eq.codigo} - ${eq.nombre} (${money(eq.precio_lista)})`;
+            sel.appendChild(opt);
+        });
+        sel.value = val;
+    });
+}
+
+function onEquipoSelect(selectEl) {
+    const row = selectEl.closest('.cot-item-row');
+    const eqId = selectEl.value;
+    if (!eqId) return;
+    const eq = equiposCatalogo.find(e => e.id == eqId);
+    if (eq) {
+        row.querySelector('.cot-precio').value = eq.precio_lista || 0;
+        row.querySelector('.cot-desc').value = `${eq.nombre}${eq.marca ? ' - ' + eq.marca : ''}${eq.modelo ? ' ' + eq.modelo : ''}`;
+    }
+}
+
+function addCotItem() {
+    const container = document.getElementById('cot-items-container');
+    const idx = container.children.length;
+    const div = document.createElement('div');
+    div.className = 'cot-item-row';
+    div.dataset.index = idx;
+    div.innerHTML = `
+        <select class="cot-equipo-select" onchange="onEquipoSelect(this)">
+            <option value="">Seleccionar equipo...</option>
+        </select>
+        <input type="number" class="cot-cantidad" value="1" min="1" placeholder="Cant" style="width:70px">
+        <input type="number" class="cot-precio" step="0.01" min="0" placeholder="Precio unitario" style="width:150px">
+        <input type="text" class="cot-desc" placeholder="Descripcion" style="flex:1">
+        <button type="button" class="btn btn-sm btn-danger" onclick="removeCotItem(this)">X</button>
+    `;
+    container.appendChild(div);
+    populateCotEquipoSelects();
+}
+
+function removeCotItem(btn) {
+    const container = document.getElementById('cot-items-container');
+    if (container.children.length <= 1) {
+        notify('Debe haber al menos un equipo', 'error');
+        return;
+    }
+    btn.closest('.cot-item-row').remove();
+}
+
+// Setup cotizacion form
+document.addEventListener('DOMContentLoaded', () => {
+    const formCot = document.getElementById('form-cotizacion');
+    if (formCot) {
+        formCot.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const items = [];
+            document.querySelectorAll('.cot-item-row').forEach(row => {
+                const eqId = row.querySelector('.cot-equipo-select').value;
+                const cant = row.querySelector('.cot-cantidad').value || 1;
+                const precio = row.querySelector('.cot-precio').value;
+                const desc = row.querySelector('.cot-desc').value;
+                if (precio && desc) {
+                    items.push({
+                        equipo_id: eqId || null,
+                        cantidad: parseInt(cant),
+                        precio_unitario: parseFloat(precio),
+                        descripcion: desc
+                    });
+                }
+            });
+            if (items.length === 0) {
+                notify('Agrega al menos un equipo con precio y descripcion', 'error');
+                return;
+            }
+            try {
+                const r = await fetch(`${API}/api/cotizaciones`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vendedor: document.getElementById('cot-vendedor').value,
+                        cliente_nombre: document.getElementById('cot-cliente').value,
+                        cliente_empresa: document.getElementById('cot-empresa').value,
+                        cliente_telefono: document.getElementById('cot-telefono').value,
+                        cliente_email: document.getElementById('cot-email').value,
+                        cliente_direccion: document.getElementById('cot-direccion').value,
+                        incluye_iva: document.getElementById('cot-iva').value === 'true',
+                        notas: document.getElementById('cot-notas').value,
+                        items: items
+                    })
+                });
+                const data = await r.json();
+                if (data.success) {
+                    notify(`Cotizacion ${data.folio} creada`, 'success');
+                    formCot.reset();
+                    loadCotizaciones();
+                    verCotizacion(data.id);
+                } else {
+                    notify(data.error || 'Error al crear cotizacion', 'error');
+                }
+            } catch (err) {
+                notify('Error: ' + err.message, 'error');
+            }
+        });
+    }
+});
+
+async function verCotizacion(id) {
+    try {
+        const r = await fetch(`${API}/api/cotizaciones/${id}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const cot = await r.json();
+
+        const fechaCot = formatDate(cot.fecha_cotizacion);
+        const vigencia = new Date(cot.fecha_cotizacion);
+        vigencia.setDate(vigencia.getDate() + (cot.vigencia_dias || 30));
+        const fechaVig = formatDate(vigencia.toISOString());
+
+        let itemsHtml = cot.items.map((it, i) => `
+            <tr>
+                <td style="text-align:center">${i + 1}</td>
+                <td>${it.descripcion}</td>
+                <td style="text-align:center">${it.cantidad}</td>
+                <td style="text-align:right">${money(it.precio_unitario)}</td>
+                <td style="text-align:right">${money(it.total_linea)}</td>
+            </tr>
+        `).join('');
+
+        document.getElementById('cotizacion-print-area').innerHTML = `
+            <div class="cot-pdf" id="cot-pdf-content">
+                <div class="cot-pdf-header">
+                    <div class="cot-pdf-logo">
+                        <h1>DURTRON</h1>
+                        <span>Innovacion Industrial</span>
+                    </div>
+                    <div class="cot-pdf-folio">
+                        <div class="folio-number">${cot.folio}</div>
+                        <div>Fecha: ${fechaCot}</div>
+                        <div>Vigencia: ${fechaVig}</div>
+                    </div>
+                </div>
+
+                <div class="cot-pdf-divider"></div>
+
+                <div class="cot-pdf-info-grid">
+                    <div class="cot-pdf-info-block">
+                        <h4>Datos del Cliente</h4>
+                        <p><strong>${cot.cliente_nombre}</strong></p>
+                        ${cot.cliente_empresa ? `<p>${cot.cliente_empresa}</p>` : ''}
+                        ${cot.cliente_telefono ? `<p>Tel: ${cot.cliente_telefono}</p>` : ''}
+                        ${cot.cliente_email ? `<p>${cot.cliente_email}</p>` : ''}
+                        ${cot.cliente_direccion ? `<p>${cot.cliente_direccion}</p>` : ''}
+                    </div>
+                    <div class="cot-pdf-info-block">
+                        <h4>Datos de DURTRON</h4>
+                        <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                        <p>Av. del Sol #329, Durango, Dgo.</p>
+                        <p>Tel: 618 134 1056</p>
+                        <p>Atencion: ${cot.vendedor}</p>
+                    </div>
+                </div>
+
+                <table class="cot-pdf-table">
+                    <thead>
+                        <tr>
+                            <th style="width:50px">#</th>
+                            <th>Descripcion</th>
+                            <th style="width:70px">Cant.</th>
+                            <th style="width:130px">P. Unitario</th>
+                            <th style="width:130px">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemsHtml}</tbody>
+                </table>
+
+                <div class="cot-pdf-totals">
+                    <div class="cot-total-row">
+                        <span>Subtotal:</span>
+                        <strong>${money(cot.subtotal)}</strong>
+                    </div>
+                    ${cot.incluye_iva ? `
+                    <div class="cot-total-row">
+                        <span>IVA (16%):</span>
+                        <strong>${money(cot.iva)}</strong>
+                    </div>` : ''}
+                    <div class="cot-total-row cot-total-final">
+                        <span>TOTAL:</span>
+                        <strong>${money(cot.total)}</strong>
+                    </div>
+                </div>
+
+                ${cot.notas ? `<div class="cot-pdf-notas"><h4>Notas</h4><p>${cot.notas}</p></div>` : ''}
+
+                <div class="cot-pdf-terminos">
+                    <h4>TERMINOS Y CONDICIONES DE VENTA, GARANTIA Y SERVICIO</h4>
+                    <p style="margin-bottom:0.5rem;font-size:0.72rem"><strong>Durtron Fabricacion Industrial</strong> — El cliente reconoce y acepta que al realizar cualquier anticipo, firma de pedido, cotizacion aceptada, comprobante de pago o aprobacion electronica, acepta totalmente los presentes terminos y condiciones.</p>
+                    <ul>
+                        <li><strong>Precios y Validez:</strong> Los precios estan sujetos a cambio sin previo aviso. Esta cotizacion tiene una validez de ${cot.vigencia_dias || 7} dias naturales a partir de su emision.</li>
+                        <li><strong>Anticipo:</strong> La fabricacion inicia con el anticipo del 60% del valor total del pedido. El tiempo de entrega se cuenta a partir de la confirmacion de recepcion del anticipo.</li>
+                        <li><strong>No Devoluciones:</strong> No se realizan devoluciones de anticipos ni cancelaciones del pedido, bajo ninguna circunstancia.</li>
+                        <li><strong>Liquidacion:</strong> Una vez concluida la fabricacion, el cliente tiene 10 dias naturales para liquidar. Despues se aplica cargo de $300 MXN diarios por almacenamiento.</li>
+                        <li><strong>Abandono:</strong> Si despues de 90 dias habiles el cliente no liquida ni retira el equipo, se considerara abandonado y DURTRON podra disponer del mismo.</li>
+                        <li><strong>Tiempos de Entrega:</strong> Las fechas son estimadas, sujetas a disponibilidad de materiales, logistica y causas de fuerza mayor.</li>
+                        <li><strong>Garantia:</strong> 30 dias naturales desde la fecha de entrega, cubriendo defectos de fabricacion y materiales. No cubre: mal uso, golpes, falta de mantenimiento, intervenciones no autorizadas o desgaste normal.</li>
+                        <li><strong>Transporte:</strong> El transporte y sus costos son responsabilidad del cliente. El riesgo se transfiere al entregar al transportista.</li>
+                        <li><strong>Propiedad Intelectual:</strong> Todos los disenos y planos son propiedad exclusiva de DURTRON. Queda prohibida su reproduccion o ingenieria inversa.</li>
+                        <li><strong>Aceptacion:</strong> El pago de anticipo, firma de pedido o aceptacion electronica implica la aceptacion total de estos terminos.</li>
+                    </ul>
+                </div>
+
+                <div class="cot-pdf-footer">
+                    <p>DURTRON - Innovacion Industrial | Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
+                </div>
+            </div>
+        `;
+
+        openModal('modal-cotizacion');
+    } catch (e) {
+        notify('Error al cargar cotizacion: ' + e.message, 'error');
+    }
+}
+
+function imprimirCotizacion() {
+    const content = document.getElementById('cot-pdf-content');
+    if (!content) return;
+    const win = window.open('', '_blank');
+    win.document.write(`
+        <html><head>
+        <title>Cotizacion DURTRON</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: 'Inter', sans-serif; padding: 0; color: #333; }
+            .cot-pdf { max-width: 800px; margin: 0 auto; padding: 2rem; }
+            .cot-pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+            .cot-pdf-logo h1 { font-size: 2.2rem; font-weight: 800; color: #D2152B; letter-spacing: 2px; }
+            .cot-pdf-logo span { color: #F47427; font-size: 0.85rem; font-weight: 600; }
+            .cot-pdf-folio { text-align: right; font-size: 0.85rem; color: #555; }
+            .folio-number { font-size: 1.2rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.3rem; }
+            .cot-pdf-divider { height: 4px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1.5rem; }
+            .cot-pdf-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; }
+            .cot-pdf-info-block h4 { color: #D2152B; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
+            .cot-pdf-info-block p { font-size: 0.85rem; line-height: 1.6; }
+            .cot-pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+            .cot-pdf-table th { background: #1a1a2e; color: white; padding: 0.6rem 0.8rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+            .cot-pdf-table td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+            .cot-pdf-table tr:nth-child(even) { background: #f8f9fa; }
+            .cot-pdf-totals { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 1.5rem; }
+            .cot-total-row { display: flex; justify-content: space-between; width: 280px; padding: 0.4rem 0; font-size: 0.9rem; border-bottom: 1px solid #eee; }
+            .cot-total-final { border-top: 2px solid #1a1a2e; border-bottom: none; padding-top: 0.6rem; font-size: 1.1rem; color: #D2152B; }
+            .cot-pdf-notas { background: #fffbeb; border-left: 3px solid #F47427; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; border-radius: 0 6px 6px 0; }
+            .cot-pdf-notas h4 { color: #F47427; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.3rem; }
+            .cot-pdf-terminos { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; font-size: 0.78rem; color: #555; }
+            .cot-pdf-terminos h4 { color: #333; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
+            .cot-pdf-terminos ul { padding-left: 1.2rem; }
+            .cot-pdf-terminos li { margin-bottom: 0.3rem; line-height: 1.5; }
+            .cot-pdf-footer { text-align: center; font-size: 0.75rem; color: #888; padding-top: 1rem; border-top: 1px solid #eee; }
+            @media print { body { padding: 0; } .cot-pdf { padding: 1rem; } }
+        </style>
+        </head><body>
+        ${content.outerHTML}
+        <script>setTimeout(()=>{window.print();},500)<\/script>
+        </body></html>
+    `);
+    win.document.close();
+}
+
+async function deleteCotizacion(id) {
+    if (!confirm('Eliminar esta cotizacion?')) return;
+    try {
+        const r = await fetch(`${API}/api/cotizaciones/${id}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (data.success) {
+            notify('Cotizacion eliminada', 'success');
+            loadCotizaciones();
+        } else {
+            notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
 }
