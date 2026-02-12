@@ -7,6 +7,13 @@ let configData = {};
 let dashboardData = {};
 let periodoActual = 'mensual';
 
+// ===== AUTH =====
+async function cerrarSesion() {
+    if (!confirm('Cerrar sesion?')) return;
+    await fetch(`${API}/api/logout`, { method: 'POST' });
+    window.location.href = '/login';
+}
+
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
     setupNav();
