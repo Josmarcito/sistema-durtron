@@ -36,7 +36,9 @@ const sectionTitles = {
     inventario: 'Inventario',
     ventas: 'Registro de Ventas',
     vendedores: 'Vendedores',
-    cotizaciones: 'Cotizaciones'
+    cotizaciones: 'Cotizaciones',
+    proveedores: 'Proveedores',
+    requisiciones: 'Requisiciones'
 };
 
 function toggleSidebar() {
@@ -63,6 +65,8 @@ function setupNav() {
             if (s === 'ventas') loadVentas();
             if (s === 'dashboard') loadDashboard();
             if (s === 'cotizaciones') { loadCotizaciones(); populateCotEquipoSelects(); }
+            if (s === 'proveedores') loadProveedores();
+            if (s === 'requisiciones') { loadRequisiciones(); populateReqProveedorSelect(); }
         });
     });
 }
@@ -1058,6 +1062,313 @@ async function deleteCotizacion(id) {
             loadCotizaciones();
         } else {
             notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ==================== PROVEEDORES ====================
+let proveedoresData = [];
+
+async function loadProveedores() {
+    try {
+        const res = await fetch(`${API}/api/proveedores`);
+        proveedoresData = await res.json();
+        renderProveedores();
+    } catch (e) {
+        notify('Error al cargar proveedores: ' + e.message, 'error');
+    }
+}
+
+function renderProveedores() {
+    const tbody = document.getElementById('tabla-proveedores');
+    if (!proveedoresData.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">No hay proveedores registrados</td></tr>';
+        return;
+    }
+    tbody.innerHTML = proveedoresData.map(p => `
+        <tr>
+            <td><strong>${p.razon_social}</strong></td>
+            <td>${p.contacto_nombre || '-'}</td>
+            <td>${p.correo || '-'}</td>
+            <td>${p.telefono || '-'}</td>
+            <td>${p.whatsapp || '-'}</td>
+            <td><span class="badge badge-${p.medio_preferido === 'WhatsApp' ? 'si' : 'cotizacion'}">${p.medio_preferido}</span></td>
+            <td class="action-buttons">
+                <button class="btn btn-danger btn-sm" onclick="deleteProveedor(${p.id})">Eliminar</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Setup form: Proveedor
+document.addEventListener('DOMContentLoaded', () => {
+    const formProv = document.getElementById('form-proveedor');
+    if (formProv) {
+        formProv.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const body = {
+                razon_social: document.getElementById('prov-razon').value.trim(),
+                contacto_nombre: document.getElementById('prov-contacto').value.trim(),
+                correo: document.getElementById('prov-correo').value.trim(),
+                telefono: document.getElementById('prov-telefono').value.trim(),
+                whatsapp: document.getElementById('prov-whatsapp').value.trim(),
+                medio_preferido: document.getElementById('prov-medio').value,
+                notas: document.getElementById('prov-notas').value.trim()
+            };
+            if (!body.razon_social) { notify('Razon social es obligatoria', 'error'); return; }
+            try {
+                const res = await fetch(`${API}/api/proveedores`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    notify('Proveedor registrado', 'success');
+                    formProv.reset();
+                    loadProveedores();
+                } else {
+                    notify(data.error || 'Error', 'error');
+                }
+            } catch (e) {
+                notify('Error: ' + e.message, 'error');
+            }
+        });
+    }
+
+    // Setup form: Requisicion
+    const formReq = document.getElementById('form-requisicion');
+    if (formReq) {
+        formReq.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const items = [];
+            document.querySelectorAll('#req-items-container .cot-item-row').forEach(row => {
+                const comp = row.querySelector('.req-comp').value.trim();
+                if (comp) {
+                    items.push({
+                        componente: comp,
+                        cantidad: parseInt(row.querySelector('.req-cant').value) || 1,
+                        unidad: row.querySelector('.req-unidad').value.trim() || 'pza',
+                        precio_estimado: parseFloat(row.querySelector('.req-precio').value) || 0
+                    });
+                }
+            });
+            if (items.length === 0) { notify('Agrega al menos un componente', 'error'); return; }
+            const body = {
+                equipo_nombre: document.getElementById('req-equipo').value.trim(),
+                proveedor_id: document.getElementById('req-proveedor').value || null,
+                notas: document.getElementById('req-notas').value.trim(),
+                items
+            };
+            try {
+                const res = await fetch(`${API}/api/requisiciones`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    notify(`Requisicion ${data.folio} creada`, 'success');
+                    closeModal('modal-requisicion');
+                    formReq.reset();
+                    loadRequisiciones();
+                } else {
+                    notify(data.error || 'Error', 'error');
+                }
+            } catch (e) {
+                notify('Error: ' + e.message, 'error');
+            }
+        });
+    }
+});
+
+async function deleteProveedor(pid) {
+    if (!confirm('¿Eliminar este proveedor?')) return;
+    try {
+        const res = await fetch(`${API}/api/proveedores/${pid}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            notify('Proveedor eliminado', 'success');
+            loadProveedores();
+        } else {
+            notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ==================== REQUISICIONES ====================
+let requisicionesData = [];
+
+async function loadRequisiciones() {
+    try {
+        const res = await fetch(`${API}/api/requisiciones`);
+        requisicionesData = await res.json();
+        renderRequisiciones();
+    } catch (e) {
+        notify('Error al cargar requisiciones: ' + e.message, 'error');
+    }
+}
+
+function renderRequisiciones() {
+    const tbody = document.getElementById('tabla-requisiciones');
+    if (!requisicionesData.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No hay requisiciones</td></tr>';
+        return;
+    }
+    const estadoBadge = {
+        'Pendiente': 'badge-planta1',
+        'Enviada': 'badge-cotizacion',
+        'Recibida': 'badge-si',
+        'Cancelada': 'badge-no'
+    };
+    tbody.innerHTML = requisicionesData.map(r => {
+        const fecha = r.fecha_creacion ? new Date(r.fecha_creacion).toLocaleDateString('es-MX') : '-';
+        return `
+        <tr>
+            <td><strong>${r.folio}</strong></td>
+            <td>${r.equipo_nombre || '-'}</td>
+            <td>${r.proveedor_nombre || 'Sin asignar'}</td>
+            <td><span class="badge ${estadoBadge[r.estado] || 'badge-planta1'}">${r.estado}</span></td>
+            <td>${fecha}</td>
+            <td class="action-buttons">
+                <button class="btn btn-primary btn-sm" onclick="verRequisicion(${r.id})">Ver</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteRequisicion(${r.id})">&#10006;</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function addReqItem() {
+    const container = document.getElementById('req-items-container');
+    const row = document.createElement('div');
+    row.className = 'cot-item-row';
+    row.innerHTML = `
+        <input type="text" placeholder="Componente" style="flex:2" class="req-comp">
+        <input type="number" placeholder="Cant." style="width:70px" class="req-cant" value="1" min="1">
+        <input type="text" placeholder="Unidad" style="width:80px" class="req-unidad" value="pza">
+        <input type="number" placeholder="$ Est." style="width:100px" class="req-precio" step="0.01" value="0">
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#10006;</button>
+    `;
+    container.appendChild(row);
+}
+
+function populateReqProveedorSelect() {
+    const sel = document.getElementById('req-proveedor');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- Sin proveedor --</option>';
+    proveedoresData.forEach(p => {
+        sel.innerHTML += `<option value="${p.id}">${p.razon_social}</option>`;
+    });
+}
+
+async function verRequisicion(rid) {
+    openModal('modal-req-detalle');
+    const body = document.getElementById('req-detalle-body');
+    body.innerHTML = '<p class="loading">Cargando...</p>';
+    try {
+        const res = await fetch(`${API}/api/requisiciones/${rid}`);
+        const r = await res.json();
+        document.getElementById('req-detalle-titulo').textContent = `Requisicion ${r.folio}`;
+        const itemsHtml = (r.items || []).map(it => `
+            <tr>
+                <td>${it.componente}</td>
+                <td>${it.cantidad}</td>
+                <td>${it.unidad}</td>
+                <td>$${Number(it.precio_estimado || 0).toFixed(2)}</td>
+            </tr>
+        `).join('');
+        body.innerHTML = `
+            <div style="margin-bottom:1rem">
+                <p><strong>Folio:</strong> ${r.folio}</p>
+                <p><strong>Equipo:</strong> ${r.equipo_nombre || '-'}</p>
+                <p><strong>Proveedor:</strong> ${r.proveedor_nombre || 'Sin asignar'}</p>
+                <p><strong>Estado:</strong> <span class="badge badge-planta1">${r.estado}</span></p>
+                <p><strong>Notas:</strong> ${r.notas || '-'}</p>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Componente</th><th>Cant.</th><th>Unidad</th><th>Precio Est.</th></tr></thead>
+                    <tbody>${itemsHtml || '<tr><td colspan="4" class="loading">Sin componentes</td></tr>'}</tbody>
+                </table>
+            </div>
+            <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap">
+                <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id})">📱 Enviar por WhatsApp</button>
+                <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id})">📧 Enviar por Email</button>
+                <select onchange="cambiarEstadoReq(${r.id}, this.value)" style="padding:0.3rem 0.6rem;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border-light);font-size:0.8rem">
+                    <option value="Pendiente" ${r.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                    <option value="Enviada" ${r.estado === 'Enviada' ? 'selected' : ''}>Enviada</option>
+                    <option value="Recibida" ${r.estado === 'Recibida' ? 'selected' : ''}>Recibida</option>
+                    <option value="Cancelada" ${r.estado === 'Cancelada' ? 'selected' : ''}>Cancelada</option>
+                </select>
+            </div>
+        `;
+    } catch (e) {
+        body.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+    }
+}
+
+async function enviarReqWhatsApp(rid) {
+    try {
+        const res = await fetch(`${API}/api/requisiciones/${rid}/whatsapp-url`);
+        const data = await res.json();
+        if (data.success) {
+            window.open(data.url, '_blank');
+            notify('Abriendo WhatsApp...', 'success');
+        } else {
+            notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function enviarReqEmail(rid) {
+    try {
+        const res = await fetch(`${API}/api/requisiciones/${rid}/enviar-email`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            notify(data.message, 'success');
+        } else {
+            notify(data.error || 'Error al enviar email', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function cambiarEstadoReq(rid, estado) {
+    try {
+        const res = await fetch(`${API}/api/requisiciones/${rid}/estado`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado })
+        });
+        const data = await res.json();
+        if (data.success) {
+            notify(`Estado cambiado a ${estado}`, 'success');
+            loadRequisiciones();
+        } else {
+            notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function deleteRequisicion(rid) {
+    if (!confirm('¿Eliminar esta requisicion?')) return;
+    try {
+        const res = await fetch(`${API}/api/requisiciones/${rid}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            notify('Requisicion eliminada', 'success');
+            loadRequisiciones();
+        } else {
+            notify(data.error || 'Error', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');

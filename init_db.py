@@ -146,12 +146,72 @@ def init_db():
     ''')
     print("  OK tabla 'cotizacion_items'")
 
+    # Tabla proveedores
+    print("Creando tabla 'proveedores'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS proveedores (
+            id SERIAL PRIMARY KEY,
+            razon_social VARCHAR(255) NOT NULL,
+            contacto_nombre VARCHAR(200),
+            correo VARCHAR(100),
+            telefono VARCHAR(50),
+            whatsapp VARCHAR(50),
+            medio_preferido VARCHAR(50) DEFAULT 'WhatsApp',
+            notas TEXT,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'proveedores'")
+
+    # Tabla plantillas_componentes
+    print("Creando tabla 'plantillas_componentes'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS plantillas_componentes (
+            id SERIAL PRIMARY KEY,
+            categoria VARCHAR(100) NOT NULL,
+            componente VARCHAR(200) NOT NULL,
+            cantidad_default INTEGER DEFAULT 1,
+            unidad VARCHAR(50) DEFAULT 'pza'
+        )
+    ''')
+    print("  OK tabla 'plantillas_componentes'")
+
+    # Tabla requisiciones
+    print("Creando tabla 'requisiciones'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS requisiciones (
+            id SERIAL PRIMARY KEY,
+            folio VARCHAR(20) UNIQUE NOT NULL,
+            inventario_id INTEGER REFERENCES inventario(id),
+            proveedor_id INTEGER REFERENCES proveedores(id),
+            equipo_nombre VARCHAR(255),
+            estado VARCHAR(20) DEFAULT 'Pendiente',
+            notas TEXT,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'requisiciones'")
+
+    # Tabla requisicion_items
+    print("Creando tabla 'requisicion_items'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS requisicion_items (
+            id SERIAL PRIMARY KEY,
+            requisicion_id INTEGER NOT NULL REFERENCES requisiciones(id) ON DELETE CASCADE,
+            componente VARCHAR(200) NOT NULL,
+            cantidad INTEGER DEFAULT 1,
+            unidad VARCHAR(50) DEFAULT 'pza',
+            precio_estimado DECIMAL(12,2) DEFAULT 0
+        )
+    ''')
+    print("  OK tabla 'requisicion_items'")
+
     conn.commit()
     cursor.close()
     conn.close()
     print("=" * 60)
     print("Base de datos inicializada correctamente")
-    print("Tablas: equipos, inventario, ventas, cotizaciones, cotizacion_items")
+    print("Tablas: equipos, inventario, ventas, cotizaciones, cotizacion_items, proveedores, plantillas_componentes, requisiciones, requisicion_items")
     print("=" * 60)
 
 if __name__ == '__main__':

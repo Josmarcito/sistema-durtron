@@ -44,6 +44,50 @@ def run_migrations():
                 cur.execute(sql)
             except Exception:
                 pass
+        # Phase B: tablas nuevas
+        phase_b_tables = [
+            """CREATE TABLE IF NOT EXISTS proveedores (
+                id SERIAL PRIMARY KEY,
+                razon_social VARCHAR(255) NOT NULL,
+                contacto_nombre VARCHAR(200),
+                correo VARCHAR(100),
+                telefono VARCHAR(50),
+                whatsapp VARCHAR(50),
+                medio_preferido VARCHAR(50) DEFAULT 'WhatsApp',
+                notas TEXT,
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS plantillas_componentes (
+                id SERIAL PRIMARY KEY,
+                categoria VARCHAR(100) NOT NULL,
+                componente VARCHAR(200) NOT NULL,
+                cantidad_default INTEGER DEFAULT 1,
+                unidad VARCHAR(50) DEFAULT 'pza'
+            )""",
+            """CREATE TABLE IF NOT EXISTS requisiciones (
+                id SERIAL PRIMARY KEY,
+                folio VARCHAR(20) UNIQUE NOT NULL,
+                inventario_id INTEGER REFERENCES inventario(id),
+                proveedor_id INTEGER REFERENCES proveedores(id),
+                equipo_nombre VARCHAR(255),
+                estado VARCHAR(20) DEFAULT 'Pendiente',
+                notas TEXT,
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS requisicion_items (
+                id SERIAL PRIMARY KEY,
+                requisicion_id INTEGER NOT NULL REFERENCES requisiciones(id) ON DELETE CASCADE,
+                componente VARCHAR(200) NOT NULL,
+                cantidad INTEGER DEFAULT 1,
+                unidad VARCHAR(50) DEFAULT 'pza',
+                precio_estimado DECIMAL(12,2) DEFAULT 0
+            )""",
+        ]
+        for sql in phase_b_tables:
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
         conn.commit()
         cur.close()
         conn.close()
@@ -798,6 +842,329 @@ def delete_cotizacion(cid):
         cur.close()
         conn.close()
         return jsonify({'success': True, 'message': 'Cotizacion eliminada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PROVEEDORES ====================
+@app.route('/api/proveedores', methods=['GET'])
+def get_proveedores():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM proveedores ORDER BY razon_social')
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return Response(json.dumps(rows, default=decimal_default), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/proveedores', methods=['POST'])
+def create_proveedor():
+    try:
+        d = request.json
+        if not d.get('razon_social'):
+            return jsonify({'error': 'Razon social es obligatoria'}), 400
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO proveedores (razon_social, contacto_nombre, correo, telefono, whatsapp, medio_preferido, notas)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        ''', (d['razon_social'], d.get('contacto_nombre',''), d.get('correo',''),
+              d.get('telefono',''), d.get('whatsapp',''), d.get('medio_preferido','WhatsApp'), d.get('notas','')))
+        pid = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': pid, 'message': 'Proveedor creado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/proveedores/<int:pid>', methods=['PUT'])
+def update_proveedor(pid):
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE proveedores SET razon_social=%s, contacto_nombre=%s, correo=%s,
+            telefono=%s, whatsapp=%s, medio_preferido=%s, notas=%s WHERE id=%s
+        ''', (d.get('razon_social',''), d.get('contacto_nombre',''), d.get('correo',''),
+              d.get('telefono',''), d.get('whatsapp',''), d.get('medio_preferido','WhatsApp'),
+              d.get('notas',''), pid))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Proveedor actualizado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/proveedores/<int:pid>', methods=['DELETE'])
+def delete_proveedor(pid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM proveedores WHERE id=%s', (pid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Proveedor eliminado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== REQUISICIONES ====================
+@app.route('/api/requisiciones', methods=['GET'])
+def get_requisiciones():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT r.*, p.razon_social as proveedor_nombre
+            FROM requisiciones r
+            LEFT JOIN proveedores p ON r.proveedor_id = p.id
+            ORDER BY r.fecha_creacion DESC
+        ''')
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return Response(json.dumps(rows, default=decimal_default), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones', methods=['POST'])
+def create_requisicion():
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        # Generar folio
+        anio = datetime.now().year
+        cur.execute("SELECT COUNT(*) as cnt FROM requisiciones WHERE folio LIKE %s", (f'REQ-{anio}-%',))
+        cnt = cur.fetchone()['cnt']
+        folio = f"REQ-{anio}-{cnt+1:04d}"
+        # Insertar requisicion
+        cur.execute('''
+            INSERT INTO requisiciones (folio, inventario_id, proveedor_id, equipo_nombre, notas)
+            VALUES (%s,%s,%s,%s,%s) RETURNING id
+        ''', (folio, d.get('inventario_id'), d.get('proveedor_id'),
+              d.get('equipo_nombre',''), d.get('notas','')))
+        rid = cur.fetchone()['id']
+        # Insertar items
+        items = d.get('items', [])
+        for item in items:
+            cur.execute('''
+                INSERT INTO requisicion_items (requisicion_id, componente, cantidad, unidad, precio_estimado)
+                VALUES (%s,%s,%s,%s,%s)
+            ''', (rid, item.get('componente',''), item.get('cantidad',1),
+                  item.get('unidad','pza'), item.get('precio_estimado',0)))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': rid, 'folio': folio, 'message': f'Requisicion {folio} creada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>', methods=['GET'])
+def get_requisicion(rid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT r.*, p.razon_social as proveedor_nombre, p.correo as proveedor_correo,
+                   p.telefono as proveedor_telefono, p.whatsapp as proveedor_whatsapp
+            FROM requisiciones r
+            LEFT JOIN proveedores p ON r.proveedor_id = p.id
+            WHERE r.id=%s
+        ''', (rid,))
+        req = cur.fetchone()
+        if not req:
+            return jsonify({'error': 'Requisicion no encontrada'}), 404
+        cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
+        req['items'] = cur.fetchall()
+        cur.close()
+        conn.close()
+        return Response(json.dumps(req, default=decimal_default), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>', methods=['DELETE'])
+def delete_requisicion(rid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM requisicion_items WHERE requisicion_id=%s', (rid,))
+        cur.execute('DELETE FROM requisiciones WHERE id=%s', (rid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Requisicion eliminada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>/estado', methods=['PUT'])
+def update_requisicion_estado(rid):
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('UPDATE requisiciones SET estado=%s WHERE id=%s', (d.get('estado','Pendiente'), rid))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Estado actualizado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>/enviar-email', methods=['POST'])
+def enviar_requisicion_email(rid):
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        smtp_user = os.environ.get('SMTP_USER', '')
+        smtp_pass = os.environ.get('SMTP_PASS', '')
+        smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+
+        if not smtp_user or not smtp_pass:
+            return jsonify({'error': 'Credenciales SMTP no configuradas. Configure SMTP_USER y SMTP_PASS en variables de entorno.'}), 400
+
+        # Obtener datos de la requisicion
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT r.*, p.razon_social, p.correo as proveedor_correo, p.contacto_nombre
+            FROM requisiciones r
+            LEFT JOIN proveedores p ON r.proveedor_id = p.id
+            WHERE r.id=%s
+        ''', (rid,))
+        req = cur.fetchone()
+        if not req:
+            return jsonify({'error': 'Requisicion no encontrada'}), 404
+        if not req.get('proveedor_correo'):
+            return jsonify({'error': 'El proveedor no tiene correo registrado'}), 400
+
+        cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        # Construir email
+        items_text = "\n".join([
+            f"  - {it['componente']}: {it['cantidad']} {it['unidad']}"
+            for it in items
+        ])
+        body = f"""Estimado/a {req.get('contacto_nombre', req['razon_social'])},
+
+Le enviamos la requisicion {req['folio']} de DURTRON para el equipo: {req.get('equipo_nombre','')}.
+
+Componentes requeridos:
+{items_text}
+
+Notas: {req.get('notas', 'N/A')}
+
+Favor de enviar cotizacion a la brevedad.
+
+Saludos,
+DURTRON - Innovacion Industrial
+Tel: 618 134 1056
+"""
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = req['proveedor_correo']
+        msg['Subject'] = f"Requisicion {req['folio']} - DURTRON"
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+
+        return jsonify({'success': True, 'message': f'Email enviado a {req["proveedor_correo"]}'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>/whatsapp-url', methods=['GET'])
+def get_whatsapp_url(rid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT r.*, p.whatsapp, p.telefono, p.razon_social
+            FROM requisiciones r LEFT JOIN proveedores p ON r.proveedor_id = p.id
+            WHERE r.id=%s
+        ''', (rid,))
+        req = cur.fetchone()
+        if not req:
+            return jsonify({'error': 'Requisicion no encontrada'}), 404
+        cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        tel = (req.get('whatsapp') or req.get('telefono') or '').replace(' ','').replace('-','').replace('+','')
+        if not tel:
+            return jsonify({'error': 'El proveedor no tiene telefono/WhatsApp registrado'}), 400
+
+        items_text = "%0A".join([f"- {it['componente']}: {it['cantidad']} {it['unidad']}" for it in items])
+        mensaje = (f"Hola {req.get('razon_social','')},%0A%0A"
+                   f"Le enviamos la requisicion *{req['folio']}* de DURTRON para:%0A"
+                   f"Equipo: {req.get('equipo_nombre','')}%0A%0A"
+                   f"Componentes:%0A{items_text}%0A%0A"
+                   f"Favor de enviar cotizacion. Gracias!")
+        url = f"https://wa.me/{tel}?text={mensaje}"
+        return jsonify({'success': True, 'url': url})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PLANTILLAS COMPONENTES ====================
+@app.route('/api/plantillas', methods=['GET'])
+def get_plantillas():
+    try:
+        categoria = request.args.get('categoria', '')
+        conn = get_db()
+        cur = conn.cursor()
+        if categoria:
+            cur.execute('SELECT * FROM plantillas_componentes WHERE categoria=%s ORDER BY componente', (categoria,))
+        else:
+            cur.execute('SELECT * FROM plantillas_componentes ORDER BY categoria, componente')
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return Response(json.dumps(rows, default=decimal_default), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/plantillas', methods=['POST'])
+def create_plantilla():
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO plantillas_componentes (categoria, componente, cantidad_default, unidad)
+            VALUES (%s,%s,%s,%s) RETURNING id
+        ''', (d['categoria'], d['componente'], d.get('cantidad_default',1), d.get('unidad','pza')))
+        pid = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': pid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/plantillas/<int:pid>', methods=['DELETE'])
+def delete_plantilla(pid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM plantillas_componentes WHERE id=%s', (pid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Plantilla eliminada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

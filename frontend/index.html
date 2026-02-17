@@ -43,6 +43,12 @@
             <button class="nav-btn" data-section="cotizaciones">
                 <span class="nav-icon">&#128196;</span> Cotizaciones
             </button>
+            <button class="nav-btn" data-section="proveedores">
+                <span class="nav-icon">&#128666;</span> Proveedores
+            </button>
+            <button class="nav-btn" data-section="requisiciones">
+                <span class="nav-icon">&#128203;</span> Requisiciones
+            </button>
         </nav>
         <div class="sidebar-footer">
             <button class="btn-logout" onclick="cerrarSesion()">&#x2716; Cerrar sesion</button>
@@ -557,6 +563,174 @@
                                 onclick="closeModal('modal-venta')">Cancelar</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ PROVEEDORES ============ -->
+        <section id="proveedores" class="section">
+            <h2>Proveedores</h2>
+            <p class="section-desc">Gestiona tus proveedores y contactos comerciales.</p>
+
+            <div class="card">
+                <h3>Registrar Proveedor</h3>
+                <form id="form-proveedor" class="form-grid">
+                    <div class="form-group">
+                        <label>Razon Social *</label>
+                        <input type="text" id="prov-razon" required placeholder="Nombre de la empresa">
+                    </div>
+                    <div class="form-group">
+                        <label>Contacto</label>
+                        <input type="text" id="prov-contacto" placeholder="Nombre del contacto">
+                    </div>
+                    <div class="form-group">
+                        <label>Correo</label>
+                        <input type="email" id="prov-correo" placeholder="email@proveedor.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Telefono</label>
+                        <input type="text" id="prov-telefono" placeholder="618 123 4567">
+                    </div>
+                    <div class="form-group">
+                        <label>WhatsApp</label>
+                        <input type="text" id="prov-whatsapp" placeholder="52618XXXXXXX">
+                    </div>
+                    <div class="form-group">
+                        <label>Medio Preferido</label>
+                        <select id="prov-medio">
+                            <option value="WhatsApp">WhatsApp</option>
+                            <option value="Email">Email</option>
+                            <option value="Telefono">Telefono</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Notas</label>
+                        <textarea id="prov-notas" rows="2" placeholder="Notas adicionales..."></textarea>
+                    </div>
+                    <div class="form-actions full-width">
+                        <button type="submit" class="btn btn-primary">Guardar Proveedor</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>Lista de Proveedores</h3>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Razon Social</th>
+                                <th>Contacto</th>
+                                <th>Correo</th>
+                                <th>Telefono</th>
+                                <th>WhatsApp</th>
+                                <th>Medio</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-proveedores">
+                            <tr>
+                                <td colspan="7" class="loading">Cargando...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ REQUISICIONES ============ -->
+        <section id="requisiciones" class="section">
+            <h2>Requisiciones</h2>
+            <p class="section-desc">Crea y envía hojas de requisicion a proveedores.</p>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Requisiciones</h3>
+                    <button class="btn btn-primary" onclick="openModal('modal-requisicion')">+ Nueva
+                        Requisicion</button>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Folio</th>
+                                <th>Equipo</th>
+                                <th>Proveedor</th>
+                                <th>Estado</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-requisiciones">
+                            <tr>
+                                <td colspan="6" class="loading">Cargando...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- MODAL: Nueva Requisicion -->
+        <div class="modal" id="modal-requisicion">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3>Nueva Requisicion</h3>
+                    <button class="modal-close" onclick="closeModal('modal-requisicion')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-requisicion" class="form-grid">
+                        <div class="form-group">
+                            <label>Equipo / Descripcion</label>
+                            <input type="text" id="req-equipo" placeholder="Ej: Quebradora de quijada 10x16" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Proveedor</label>
+                            <select id="req-proveedor">
+                                <option value="">-- Sin proveedor --</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Notas</label>
+                            <textarea id="req-notas" rows="2" placeholder="Instrucciones adicionales..."></textarea>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Componentes</label>
+                            <div id="req-items-container">
+                                <div class="cot-item-row">
+                                    <input type="text" placeholder="Componente" style="flex:2" class="req-comp">
+                                    <input type="number" placeholder="Cant." style="width:70px" class="req-cant"
+                                        value="1" min="1">
+                                    <input type="text" placeholder="Unidad" style="width:80px" class="req-unidad"
+                                        value="pza">
+                                    <input type="number" placeholder="$ Est." style="width:100px" class="req-precio"
+                                        step="0.01" value="0">
+                                    <button type="button" class="btn btn-danger btn-sm"
+                                        onclick="this.parentElement.remove()">&#10006;</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="addReqItem()"
+                                style="margin-top:0.5rem;">+ Agregar Componente</button>
+                        </div>
+                        <div class="form-actions full-width">
+                            <button type="submit" class="btn btn-primary">Crear Requisicion</button>
+                            <button type="button" class="btn btn-secondary"
+                                onclick="closeModal('modal-requisicion')">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Detalle Requisicion -->
+        <div class="modal" id="modal-req-detalle">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3 id="req-detalle-titulo">Requisicion</h3>
+                    <button class="modal-close" onclick="closeModal('modal-req-detalle')">&times;</button>
+                </div>
+                <div class="modal-body" id="req-detalle-body">
+                    <p class="loading">Cargando...</p>
                 </div>
             </div>
         </div>
