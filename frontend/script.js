@@ -1,4 +1,8 @@
 // ===== CONFIGURACION =====
+window.onerror = function (msg, url, line, col, error) {
+    alert("Error de Sistema (JS): " + msg + "\nLinea: " + line);
+    return false;
+};
 const API = window.location.origin;
 let equiposCatalogo = [];
 let inventarioItems = [];

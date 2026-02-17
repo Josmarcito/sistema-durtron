@@ -689,7 +689,7 @@
 
             <div class="card">
                 <h3>Registrar Proveedor</h3>
-                <form id="form-proveedor" class="form-grid">
+                <form id="form-proveedor" class="form-grid" onsubmit="event.preventDefault();">
                     <div class="form-group">
                         <label>Razon Social *</label>
                         <input type="text" id="prov-razon" required placeholder="Nombre de la empresa">
@@ -794,7 +794,7 @@
                     <button class="modal-close" onclick="closeModal('modal-requisicion')">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <form id="form-requisicion">
+                    <form id="form-requisicion" onsubmit="event.preventDefault();">
                         <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
                             <div class="form-group" style="flex:2">
                                 <label>PROYECTO / ORDEN DE PRODUCCIÓN *</label>
