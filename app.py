@@ -1,16 +1,25 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session, redirect, Response
 from flask_cors import CORS
+from functools import wraps
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 import os
 import json
+import secrets
+import io
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__, static_folder='frontend')
-CORS(app)
+app.secret_key = os.environ.get('SECRET_KEY', 'durtron-secret-key-2024-cambiar')
+CORS(app, supports_credentials=True)
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://durtron:RBYwTg26IgSlKJN8giieAhUmylzpTzn6@dpg-d66b4d6sb7us73clsr7g-a/durtron')
+
+# Credenciales de acceso (puedes cambiarlas aqui o en variables de entorno de Render)
+AUTH_USER = os.environ.get('AUTH_USER', 'durtron')
+AUTH_PASS = os.environ.get('AUTH_PASS', 'durtron2024')
 
 MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -23,18 +32,74 @@ def get_db():
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
+    if hasattr(obj, 'isoformat'):
+        return obj.isoformat()
     raise TypeError
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            # Si es una peticion API, devolver 401
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'No autorizado'}), 401
+            # Si es una pagina, redirigir al login
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated
+
+# ==================== AUTH ====================
+@app.route('/login')
+def login_page():
+    return send_from_directory('frontend', 'login.html')
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    d = request.json or {}
+    user = d.get('usuario', '')
+    pwd = d.get('password', '')
+    if user == AUTH_USER and pwd == AUTH_PASS:
+        session['logged_in'] = True
+        session['usuario'] = user
+        return jsonify({'success': True, 'message': 'Acceso concedido'})
+    return jsonify({'error': 'Usuario o contraseña incorrecta'}), 401
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({'success': True, 'message': 'Sesion cerrada'})
+
+@app.route('/api/check-auth')
+def check_auth():
+    if session.get('logged_in'):
+        return jsonify({'authenticated': True, 'usuario': session.get('usuario')})
+    return jsonify({'authenticated': False}), 401
 
 # ==================== RUTAS ESTATICAS ====================
 @app.route('/')
+@login_required
 def index():
     return send_from_directory('frontend', 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):
+    # Permitir acceso a login.html y sus recursos sin autenticar
+    if path in ('login.html', 'style.css', 'logo.png'):
+        return send_from_directory('frontend', path)
+    if not session.get('logged_in'):
+        return redirect('/login')
     return send_from_directory('frontend', path)
 
 # ==================== CONFIGURACION ====================
+# Proteger todas las rutas /api/ excepto auth y health
+@app.before_request
+def check_auth_before():
+    open_paths = ('/api/login', '/api/logout', '/api/check-auth', '/api/init-db', '/health', '/login')
+    if request.path in open_paths or not request.path.startswith('/api/'):
+        return None
+    if not session.get('logged_in'):
+        return jsonify({'error': 'No autorizado'}), 401
+
 @app.route('/api/config')
 def get_config():
     return jsonify({
@@ -43,8 +108,13 @@ def get_config():
             'No Disponible', 'Anticipo', 'En Cotizacion', 'Apartada'
         ],
         'categorias': [
-            'Quebradoras', 'Molinos', 'Cribas', 'Bandas Transportadoras',
-            'Equipos Auxiliares', 'Refacciones', 'Otro'
+            'Quebradoras de Quijadas', 'Pulverizadores de Martillos',
+            'Molinos de Bolas', 'Mesas de Concentracion',
+            'Cribas Vibratorias', 'Bandas Transportadoras',
+            'Tolvas', 'Tanques Agitadores', 'Concentrador Centrifugo',
+            'Planta Integral 500kg/hr', 'Planta Integral 1 ton/hr', 'Planta Integral 2 ton/hr',
+            'Quebradora de Laboratorio', 'Pulverizador de Laboratorio', 'Mesa de Laboratorio',
+            'Otro'
         ],
         'formas_pago': [
             'Contado', 'Credito 30 dias', 'Credito 60 dias', 'Credito 90 dias',
@@ -69,47 +139,69 @@ def get_dashboard():
         cur.execute("SELECT COUNT(*) as total FROM inventario WHERE estado = 'Disponible'")
         inv_disponible = cur.fetchone()['total']
 
-        # Ventas del anio
-        cur.execute('SELECT COUNT(*) as cnt, COALESCE(SUM(precio_venta),0) as total FROM ventas WHERE EXTRACT(YEAR FROM fecha_venta)=%s', (year,))
+        # Ventas anuales con utilidad bruta y anticipos
+        cur.execute('''
+            SELECT COUNT(*) as cnt,
+                   COALESCE(SUM(v.precio_venta),0) as neto,
+                   COALESCE(SUM(v.precio_venta - COALESCE(e.precio_costo,0)),0) as utilidad,
+                   COALESCE(SUM(CASE WHEN v.tiene_anticipo=true THEN v.anticipo_monto ELSE 0 END),0) as anticipos,
+                   COALESCE(SUM(CASE WHEN v.tiene_anticipo=true THEN v.precio_venta - v.anticipo_monto ELSE 0 END),0) as saldo_pendiente
+            FROM ventas v
+            LEFT JOIN equipos e ON v.equipo_id = e.id
+            WHERE EXTRACT(YEAR FROM v.fecha_venta)=%s
+        ''', (year,))
         row = cur.fetchone()
         ventas_anio_cnt = row['cnt']
-        ventas_anio_neto = float(row['total'])
+        ventas_anio_neto = float(row['neto'])
+        ventas_anio_iva = round(ventas_anio_neto * 1.16, 2)
+        ventas_anio_utilidad = round(float(row['utilidad']), 2)
+        ventas_anio_anticipos = round(float(row['anticipos']), 2)
+        ventas_anio_saldo = round(float(row['saldo_pendiente']), 2)
 
         # Mensual
         cur.execute('''
-            SELECT EXTRACT(MONTH FROM fecha_venta)::int as mes,
+            SELECT EXTRACT(MONTH FROM v.fecha_venta)::int as mes,
                    COUNT(*) as cnt,
-                   COALESCE(SUM(precio_venta),0) as neto
-            FROM ventas
-            WHERE EXTRACT(YEAR FROM fecha_venta)=%s
+                   COALESCE(SUM(v.precio_venta),0) as neto,
+                   COALESCE(SUM(v.precio_venta - COALESCE(e.precio_costo,0)),0) as utilidad,
+                   COALESCE(SUM(CASE WHEN v.tiene_anticipo=true THEN v.anticipo_monto ELSE 0 END),0) as anticipos
+            FROM ventas v
+            LEFT JOIN equipos e ON v.equipo_id = e.id
+            WHERE EXTRACT(YEAR FROM v.fecha_venta)=%s
             GROUP BY mes ORDER BY mes
         ''', (year,))
         rows = cur.fetchall()
         monthly = {}
         for r in rows:
-            monthly[r['mes']] = {'total_ventas': r['cnt'], 'ingreso_neto': float(r['neto'])}
+            neto = float(r['neto'])
+            monthly[r['mes']] = {
+                'total_ventas': r['cnt'],
+                'ingreso_neto': neto,
+                'ingreso_iva': round(neto * 1.16, 2),
+                'utilidad_bruta': round(float(r['utilidad']), 2),
+                'anticipos': round(float(r['anticipos']), 2)
+            }
 
+        default_month = {'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0, 'utilidad_bruta': 0.0, 'anticipos': 0.0}
         meses_data = []
         for m in range(1, 13):
-            d = monthly.get(m, {'total_ventas': 0, 'ingreso_neto': 0.0})
+            d = monthly.get(m, default_month)
             meses_data.append({
                 'mes': m,
                 'nombre': MESES[m-1],
-                'total_ventas': d['total_ventas'],
-                'ingreso_neto': d['ingreso_neto'],
-                'ingreso_iva': round(d['ingreso_neto'] * 1.16, 2)
+                **d
             })
 
         # Trimestral
         trimestres = []
         for q in range(4):
             start = q * 3
-            t = {'trimestre': q+1, 'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0}
+            t = {'trimestre': q+1, 'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0, 'utilidad_bruta': 0.0, 'anticipos': 0.0}
             for i in range(3):
-                t['total_ventas'] += meses_data[start+i]['total_ventas']
-                t['ingreso_neto'] += meses_data[start+i]['ingreso_neto']
-            t['ingreso_iva'] = round(t['ingreso_neto'] * 1.16, 2)
-            t['ingreso_neto'] = round(t['ingreso_neto'], 2)
+                for k in ['total_ventas', 'ingreso_neto', 'ingreso_iva', 'utilidad_bruta', 'anticipos']:
+                    t[k] += meses_data[start+i].get(k, 0)
+            for k in ['ingreso_neto', 'ingreso_iva', 'utilidad_bruta', 'anticipos']:
+                t[k] = round(t[k], 2)
             trimestres.append(t)
 
         cur.close()
@@ -121,7 +213,10 @@ def get_dashboard():
             'inv_disponible': inv_disponible,
             'ventas_anio': ventas_anio_cnt,
             'ingreso_neto_anio': ventas_anio_neto,
-            'ingreso_iva_anio': round(ventas_anio_neto * 1.16, 2),
+            'ingreso_iva_anio': ventas_anio_iva,
+            'utilidad_bruta_anio': ventas_anio_utilidad,
+            'anticipos_anio': ventas_anio_anticipos,
+            'saldo_pendiente_anio': ventas_anio_saldo,
             'mensual': meses_data,
             'trimestral': trimestres,
             'year': year
@@ -148,6 +243,20 @@ def get_equipos():
 def create_equipo():
     try:
         d = request.json
+        if not d:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+        codigo = (d.get('codigo') or '').strip()
+        nombre = (d.get('nombre') or '').strip()
+        if not codigo or not nombre:
+            return jsonify({'error': 'Codigo y Nombre son obligatorios'}), 400
+
+        def to_float(val, default=0):
+            try:
+                v = float(val) if val not in (None, '', 'null') else default
+                return v
+            except (ValueError, TypeError):
+                return default
+
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
@@ -156,11 +265,11 @@ def create_equipo():
                 potencia_motor, capacidad, dimensiones, peso, especificaciones)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
-            d.get('codigo',''), d.get('nombre',''), d.get('marca',''), d.get('modelo',''),
-            d.get('descripcion',''), d.get('categoria',''),
-            d.get('precio_lista', 0), d.get('precio_minimo', 0), d.get('precio_costo', 0),
-            d.get('potencia_motor',''), d.get('capacidad',''), d.get('dimensiones',''),
-            d.get('peso',''), d.get('especificaciones','')
+            codigo, nombre, d.get('marca') or '', d.get('modelo') or '',
+            d.get('descripcion') or '', d.get('categoria') or '',
+            to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
+            d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
+            d.get('peso') or '', d.get('especificaciones') or ''
         ))
         eid = cur.fetchone()['id']
         conn.commit()
@@ -168,6 +277,7 @@ def create_equipo():
         conn.close()
         return jsonify({'success': True, 'id': eid, 'message': 'Equipo agregado al catalogo'})
     except Exception as e:
+        print(f'Error creando equipo: {e}')
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/equipos/<int:eid>')
@@ -224,18 +334,26 @@ def create_inventario():
         d = request.json
         conn = get_db()
         cur = conn.cursor()
+
+        # Auto-generar numero de serie si viene vacio
+        numero_serie = (d.get('numero_serie') or '').strip()
+        if not numero_serie:
+            today = datetime.now().strftime('%Y%m%d')
+            rand = secrets.token_hex(2).upper()  # 4 caracteres hex
+            numero_serie = f'DRT-{today}-{rand}'
+
         cur.execute('''
             INSERT INTO inventario (equipo_id, numero_serie, estado, observaciones)
             VALUES (%s,%s,%s,%s) RETURNING id
         ''', (
-            d.get('equipo_id'), d.get('numero_serie',''),
+            d.get('equipo_id'), numero_serie,
             d.get('estado','Disponible'), d.get('observaciones','')
         ))
         iid = cur.fetchone()['id']
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'success': True, 'id': iid, 'message': 'Agregado al inventario'})
+        return jsonify({'success': True, 'id': iid, 'numero_serie': numero_serie, 'message': 'Agregado al inventario'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -261,6 +379,132 @@ def get_inv_item(iid):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/inventario/<int:iid>', methods=['DELETE'])
+def delete_inv_item(iid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Verificar que no tenga ventas asociadas
+        cur.execute('SELECT COUNT(*) as cnt FROM ventas WHERE inventario_id=%s', (iid,))
+        if cur.fetchone()['cnt'] > 0:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'No se puede eliminar: tiene ventas asociadas. Elimina la venta primero.'}), 400
+        cur.execute('DELETE FROM inventario WHERE id=%s', (iid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Item eliminado del inventario'})
+    except Exception as e:
+        print(f'Error eliminando inventario: {e}')
+        return jsonify({'error': str(e)}), 500
+
+# ==================== ETIQUETA PNG ====================
+@app.route('/api/inventario/<int:iid>/etiqueta')
+def generar_etiqueta(iid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT i.*, e.codigo as equipo_codigo, e.nombre as equipo_nombre,
+                   e.marca, e.modelo, e.categoria, e.potencia_motor, e.capacidad,
+                   e.dimensiones, e.peso
+            FROM inventario i JOIN equipos e ON i.equipo_id = e.id
+            WHERE i.id=%s
+        ''', (iid,))
+        item = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not item:
+            return jsonify({'error': 'No encontrado'}), 404
+
+        # Crear imagen de etiqueta 800x420
+        W, H = 800, 420
+        img = Image.new('RGB', (W, H), '#FFFFFF')
+        draw = ImageDraw.Draw(img)
+
+        # Usar fuente por defecto (Pillow built-in)
+        try:
+            font_title = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 28)
+            font_subtitle = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 12)
+            font_label = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 11)
+            font_value = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 13)
+            font_footer = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 10)
+            font_badge = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 11)
+        except Exception:
+            font_title = ImageFont.load_default()
+            font_subtitle = font_title
+            font_label = font_title
+            font_value = font_title
+            font_footer = font_title
+            font_badge = font_title
+
+        # Header: DURTRON
+        draw.text((30, 20), 'DURTRON', fill='#000000', font=font_title)
+        draw.text((30, 52), 'INNOVACION INDUSTRIAL', fill='#555555', font=font_subtitle)
+
+        # Badge: Calidad Industrial
+        draw.text((550, 20), 'Calidad Industrial', fill='#333333', font=font_badge)
+        draw.text((550, 38), 'Durtron Planta 1 Durango', fill='#555555', font=font_badge)
+
+        # Linea separadora
+        draw.line([(25, 72), (W-25, 72)], fill='#000000', width=2)
+
+        # Grid de datos - 3 columnas x 3 filas
+        campos = [
+            ('Equipo', item.get('equipo_nombre') or '-'),
+            ('Apertura', item.get('dimensiones') or '-'),
+            ('Peso del Equipo', item.get('peso') or '-'),
+            ('Modelo', item.get('modelo') or '-'),
+            ('Tamano de Alimentacion', item.get('capacidad') or '-'),
+            ('Fecha de Fabricacion', str(item.get('fecha_ingreso') or '-')),
+            ('Capacidad', item.get('capacidad') or '-'),
+            ('Potencia', item.get('potencia_motor') or '-'),
+            ('Numero de Serie', item.get('numero_serie') or '-'),
+        ]
+
+        col_w = (W - 60) // 3
+        start_y = 85
+        row_h = 65
+
+        for idx, (label, value) in enumerate(campos):
+            col = idx % 3
+            row = idx // 3
+            x = 30 + col * col_w
+            y = start_y + row * row_h
+
+            # Label
+            draw.text((x, y), label, fill='#666666', font=font_label)
+            # Value box
+            box_y = y + 16
+            draw.rectangle([(x, box_y), (x + col_w - 15, box_y + 28)], outline='#000000', width=1)
+            # Value text inside box
+            val_str = str(value)[:25]  # Truncar si es muy largo
+            draw.text((x + 6, box_y + 6), val_str, fill='#000000', font=font_value)
+
+        # Footer
+        footer_y = start_y + 3 * row_h + 15
+        draw.line([(25, footer_y), (W-25, footer_y)], fill='#000000', width=1)
+        footer_y += 10
+        draw.text((30, footer_y), '6181341056', fill='#333333', font=font_footer)
+        draw.text((280, footer_y), 'contacto@durtron.com', fill='#333333', font=font_footer)
+        draw.text((560, footer_y), 'www.durtron.com', fill='#333333', font=font_footer)
+
+        # Convertir a bytes
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+
+        serie = (item.get('numero_serie') or 'etiqueta').replace(' ', '_')
+        return Response(
+            buf.getvalue(),
+            mimetype='image/png',
+            headers={'Content-Disposition': f'attachment; filename=etiqueta_{serie}.png'}
+        )
+    except Exception as e:
+        print(f'Error generando etiqueta: {e}')
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/inventario/<int:iid>/vender', methods=['POST'])
 def vender_item(iid):
     try:
@@ -284,12 +528,25 @@ def vender_item(iid):
         descuento_monto = precio_lista - precio_venta if precio_lista > precio_venta else 0
         descuento_pct = (descuento_monto / precio_lista * 100) if precio_lista > 0 else 0
 
+        # Anticipo: validaciones
+        tiene_anticipo = d.get('tiene_anticipo', False)
+        anticipo_monto = 0
+        anticipo_fecha = None
+        if tiene_anticipo:
+            anticipo_monto = float(d.get('anticipo_monto', 0))
+            if anticipo_monto <= 0:
+                return jsonify({'error': 'El monto del anticipo es obligatorio cuando hay anticipo'}), 400
+            if anticipo_monto > precio_venta:
+                return jsonify({'error': 'El anticipo no puede ser mayor al precio de venta'}), 400
+            anticipo_fecha = d.get('anticipo_fecha') or None
+
         cur.execute('''
             INSERT INTO ventas (inventario_id, equipo_id, vendedor, cliente_nombre,
                 cliente_contacto, cliente_rfc, cliente_direccion, precio_venta,
                 descuento_monto, descuento_porcentaje, motivo_descuento,
-                forma_pago, facturado, numero_factura, autorizado_por, notas)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                forma_pago, facturado, numero_factura, autorizado_por,
+                tiene_anticipo, anticipo_monto, anticipo_fecha, notas)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
             iid, inv['equipo_id'], d.get('vendedor',''),
             d.get('cliente_nombre',''), d.get('cliente_contacto',''),
@@ -297,7 +554,9 @@ def vender_item(iid):
             precio_venta, descuento_monto, round(descuento_pct, 2),
             d.get('motivo_descuento',''), d.get('forma_pago',''),
             d.get('facturado', False), d.get('numero_factura',''),
-            d.get('autorizado_por',''), d.get('notas','')
+            d.get('autorizado_por',''),
+            tiene_anticipo, anticipo_monto, anticipo_fecha,
+            d.get('notas','')
         ))
         vid = cur.fetchone()['id']
 
@@ -332,6 +591,28 @@ def get_ventas():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/ventas/<int:vid>', methods=['DELETE'])
+def delete_venta(vid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Obtener el inventario_id antes de borrar
+        cur.execute('SELECT inventario_id FROM ventas WHERE id=%s', (vid,))
+        venta = cur.fetchone()
+        if not venta:
+            return jsonify({'error': 'Venta no encontrada'}), 404
+        # Restaurar inventario a Disponible
+        cur.execute("UPDATE inventario SET estado='Disponible' WHERE id=%s", (venta['inventario_id'],))
+        # Eliminar la venta
+        cur.execute('DELETE FROM ventas WHERE id=%s', (vid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Venta eliminada y equipo restaurado a inventario'})
+    except Exception as e:
+        print(f'Error eliminando venta: {e}')
+        return jsonify({'error': str(e)}), 500
+
 # ==================== VENDEDORES ====================
 @app.route('/api/vendedores')
 def get_vendedores():
@@ -359,6 +640,140 @@ def get_vendedores():
                 'ingreso_iva': round(float(r['ingreso_total']) * 1.16, 2)
             })
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== COTIZACIONES ====================
+@app.route('/api/cotizaciones')
+def get_cotizaciones():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT c.*, 
+                   (SELECT COUNT(*) FROM cotizacion_items ci WHERE ci.cotizacion_id = c.id) as num_items
+            FROM cotizaciones c
+            ORDER BY c.fecha_creacion DESC
+        ''')
+        data = cur.fetchall()
+        cur.close()
+        conn.close()
+        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cotizaciones', methods=['POST'])
+def create_cotizacion():
+    try:
+        d = request.json
+        if not d:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Generar folio automatico: COT-YYYY-NNNN
+        year = datetime.now().year
+        cur.execute("SELECT COUNT(*) as cnt FROM cotizaciones WHERE folio LIKE %s", (f'COT-{year}-%',))
+        count = cur.fetchone()['cnt'] + 1
+        folio = f'COT-{year}-{count:04d}'
+
+        items = d.get('items', [])
+        if not items:
+            return jsonify({'error': 'Debe agregar al menos un equipo'}), 400
+
+        incluye_iva = d.get('incluye_iva', True)
+        subtotal = 0
+        for item in items:
+            qty = int(item.get('cantidad', 1))
+            precio = float(item.get('precio_unitario', 0))
+            subtotal += qty * precio
+
+        iva = round(subtotal * 0.16, 2) if incluye_iva else 0
+        total = round(subtotal + iva, 2)
+
+        cur.execute('''
+            INSERT INTO cotizaciones (folio, cliente_nombre, cliente_empresa, cliente_telefono,
+                cliente_email, cliente_direccion, vendedor, incluye_iva,
+                subtotal, iva, total, vigencia_dias, notas)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        ''', (
+            folio,
+            d.get('cliente_nombre', ''),
+            d.get('cliente_empresa', ''),
+            d.get('cliente_telefono', ''),
+            d.get('cliente_email', ''),
+            d.get('cliente_direccion', ''),
+            d.get('vendedor', ''),
+            incluye_iva,
+            subtotal, iva, total,
+            d.get('vigencia_dias', 7),
+            d.get('notas', '')
+        ))
+        cot_id = cur.fetchone()['id']
+
+        for item in items:
+            qty = int(item.get('cantidad', 1))
+            precio = float(item.get('precio_unitario', 0))
+            total_linea = round(qty * precio, 2)
+            cur.execute('''
+                INSERT INTO cotizacion_items (cotizacion_id, equipo_id, descripcion, cantidad, precio_unitario, total_linea)
+                VALUES (%s,%s,%s,%s,%s,%s)
+            ''', (
+                cot_id,
+                item.get('equipo_id') or None,
+                item.get('descripcion', ''),
+                qty, precio, total_linea
+            ))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': cot_id, 'folio': folio, 'message': f'Cotizacion {folio} creada'})
+    except Exception as e:
+        print(f'Error creando cotizacion: {e}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cotizaciones/<int:cid>')
+def get_cotizacion(cid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM cotizaciones WHERE id=%s', (cid,))
+        cot = cur.fetchone()
+        if not cot:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Cotizacion no encontrada'}), 404
+
+        cur.execute('''
+            SELECT ci.*, e.codigo as equipo_codigo, e.nombre as equipo_nombre,
+                   e.marca, e.modelo, e.capacidad, e.potencia_motor
+            FROM cotizacion_items ci
+            LEFT JOIN equipos e ON ci.equipo_id = e.id
+            WHERE ci.cotizacion_id = %s
+            ORDER BY ci.id
+        ''', (cid,))
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        result = dict(cot)
+        result['items'] = [dict(i) for i in items]
+        return json.dumps(result, default=decimal_default), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cotizaciones/<int:cid>', methods=['DELETE'])
+def delete_cotizacion(cid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM cotizaciones WHERE id=%s', (cid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Cotizacion eliminada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

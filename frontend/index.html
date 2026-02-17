@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,17 @@
     <meta name="description" content="Sistema interno de inventario y ventas DURTRON">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
+
 <body>
     <!-- HEADER -->
     <header class="header">
         <div class="header-brand">
-            <h1>&#127963; DURTRON</h1>
-            <span>Innovacion Industrial</span>
+            <div>
+                <h1>DURTRON</h1>
+                <span>Innovacion Industrial</span>
+            </div>
         </div>
         <nav class="nav">
             <button class="nav-btn active" data-section="dashboard">Dashboard</button>
@@ -21,6 +26,9 @@
             <button class="nav-btn" data-section="inventario">Inventario</button>
             <button class="nav-btn" data-section="ventas">Ventas</button>
             <button class="nav-btn" data-section="vendedores">Vendedores</button>
+            <button class="nav-btn" data-section="cotizaciones">Cotizaciones</button>
+            <button class="nav-btn" onclick="cerrarSesion()"
+                style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);">Salir</button>
         </nav>
     </header>
 
@@ -28,33 +36,49 @@
 
         <!-- ============ DASHBOARD ============ -->
         <section id="dashboard" class="section active">
-            <h2>&#128202; Dashboard</h2>
+            <h2>Dashboard</h2>
 
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-icon">&#128230;</div>
                     <div class="stat-value" id="stat-catalogo">0</div>
                     <div class="stat-label">En Catalogo</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">&#128203;</div>
                     <div class="stat-value" id="stat-inventario">0</div>
                     <div class="stat-label">En Inventario</div>
                 </div>
                 <div class="stat-card accent">
-                    <div class="stat-icon">&#128176;</div>
                     <div class="stat-value" id="stat-ingreso-neto">$0</div>
                     <div class="stat-label">Ingreso Neto</div>
                 </div>
                 <div class="stat-card accent2">
-                    <div class="stat-icon">&#128178;</div>
                     <div class="stat-value" id="stat-ingreso-iva">$0</div>
                     <div class="stat-label">Ingreso + IVA</div>
                 </div>
+                <div class="stat-card" style="border-color:#27ae60;">
+                    <div class="stat-value" style="color:#27ae60;" id="stat-utilidad">$0</div>
+                    <div class="stat-label">Utilidad Bruta</div>
+                </div>
+                <div class="stat-card" style="border-color:#8e44ad;">
+                    <div class="stat-value" style="color:#8e44ad;" id="stat-anticipos">$0</div>
+                    <div class="stat-label">Anticipos</div>
+                </div>
+                <div class="stat-card" style="border-color:#e67e22;">
+                    <div class="stat-value" style="color:#e67e22;" id="stat-saldo">$0</div>
+                    <div class="stat-label">Saldo por Cobrar</div>
+                </div>
                 <div class="stat-card accent3">
-                    <div class="stat-icon">&#128200;</div>
                     <div class="stat-value" id="stat-total-ventas">0</div>
                     <div class="stat-label">Total Ventas</div>
+                </div>
+            </div>
+
+            <div class="dashboard-charts">
+                <div class="card chart-card">
+                    <h3>Distribucion de Ingresos</h3>
+                    <div class="chart-container">
+                        <canvas id="chart-ingresos"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -62,8 +86,10 @@
                 <div class="card-header">
                     <h3>Desglose de Ventas</h3>
                     <div class="toggle-group">
-                        <button class="toggle-btn active" id="btn-mensual" onclick="showPeriodo('mensual')">Mensual</button>
-                        <button class="toggle-btn" id="btn-trimestral" onclick="showPeriodo('trimestral')">Trimestral</button>
+                        <button class="toggle-btn active" id="btn-mensual"
+                            onclick="showPeriodo('mensual')">Mensual</button>
+                        <button class="toggle-btn" id="btn-trimestral"
+                            onclick="showPeriodo('trimestral')">Trimestral</button>
                     </div>
                 </div>
                 <div class="table-wrapper">
@@ -77,11 +103,11 @@
 
         <!-- ============ CATALOGO ============ -->
         <section id="catalogo" class="section">
-            <h2>&#128218; Catalogo de Equipos</h2>
+            <h2>Catalogo de Equipos</h2>
             <p class="section-desc">Base de datos de modelos de maquinaria. Da de alta nuevos modelos aqui.</p>
 
             <div class="card">
-                <h3>&#10133; Agregar Equipo al Catalogo</h3>
+                <h3>Agregar Equipo al Catalogo</h3>
                 <form id="form-catalogo" class="form-grid">
                     <div class="form-group">
                         <label for="cat-codigo">Codigo / ID *</label>
@@ -101,7 +127,9 @@
                     </div>
                     <div class="form-group">
                         <label for="cat-categoria">Categoria</label>
-                        <select id="cat-categoria"><option value="">Seleccionar...</option></select>
+                        <select id="cat-categoria">
+                            <option value="">Seleccionar...</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="cat-precio-lista">Precio de Lista *</label>
@@ -133,14 +161,15 @@
                     </div>
                     <div class="form-group full-width">
                         <label for="cat-especificaciones">Especificaciones</label>
-                        <textarea id="cat-especificaciones" rows="3" placeholder="Especificaciones tecnicas adicionales..."></textarea>
+                        <textarea id="cat-especificaciones" rows="3"
+                            placeholder="Especificaciones tecnicas adicionales..."></textarea>
                     </div>
                     <div class="form-group full-width">
                         <label for="cat-descripcion">Descripcion</label>
                         <textarea id="cat-descripcion" rows="2" placeholder="Descripcion del equipo..."></textarea>
                     </div>
                     <div class="form-actions full-width">
-                        <button type="submit" class="btn btn-primary">&#128190; Guardar en Catalogo</button>
+                        <button type="submit" class="btn btn-primary">Guardar en Catalogo</button>
                         <button type="reset" class="btn btn-secondary">Limpiar</button>
                     </div>
                 </form>
@@ -163,7 +192,9 @@
                             </tr>
                         </thead>
                         <tbody id="catalogo-tbody">
-                            <tr><td colspan="8" class="loading">Cargando...</td></tr>
+                            <tr>
+                                <td colspan="8" class="loading">Cargando...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -172,15 +203,17 @@
 
         <!-- ============ INVENTARIO ============ -->
         <section id="inventario" class="section">
-            <h2>&#128451; Inventario</h2>
+            <h2>Inventario</h2>
             <p class="section-desc">Equipos fisicos en existencia. Agrega unidades del catalogo al inventario.</p>
 
             <div class="card">
-                <h3>&#10133; Agregar al Inventario</h3>
+                <h3>Agregar al Inventario</h3>
                 <form id="form-inventario" class="form-grid">
                     <div class="form-group">
                         <label for="inv-equipo">Equipo del Catalogo *</label>
-                        <select id="inv-equipo" required><option value="">Seleccionar equipo...</option></select>
+                        <select id="inv-equipo" required>
+                            <option value="">Seleccionar equipo...</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="inv-serie">Numero de Serie / ID</label>
@@ -188,7 +221,9 @@
                     </div>
                     <div class="form-group">
                         <label for="inv-estado">Estado *</label>
-                        <select id="inv-estado" required><option value="">Seleccionar...</option></select>
+                        <select id="inv-estado" required>
+                            <option value="">Seleccionar...</option>
+                        </select>
                     </div>
                     <div class="form-group full-width">
                         <label for="inv-obs">Observaciones</label>
@@ -196,7 +231,7 @@
                     </div>
                     <div id="inv-equipo-info" class="equipo-preview full-width" style="display:none;"></div>
                     <div class="form-actions full-width">
-                        <button type="submit" class="btn btn-primary">&#128230; Agregar al Inventario</button>
+                        <button type="submit" class="btn btn-primary">Agregar al Inventario</button>
                     </div>
                 </form>
             </div>
@@ -205,8 +240,10 @@
                 <div class="card-header">
                     <h3>Inventario Actual</h3>
                     <div class="filter-bar">
-                        <input type="text" id="inv-search" class="search-input" placeholder="&#128269; Buscar...">
-                        <select id="inv-filter-estado" class="filter-select"><option value="">Todos los estados</option></select>
+                        <input type="text" id="inv-search" class="search-input" placeholder="Buscar...">
+                        <select id="inv-filter-estado" class="filter-select">
+                            <option value="">Todos los estados</option>
+                        </select>
                     </div>
                 </div>
                 <div class="table-wrapper">
@@ -224,7 +261,9 @@
                             </tr>
                         </thead>
                         <tbody id="inventario-tbody">
-                            <tr><td colspan="8" class="loading">Cargando...</td></tr>
+                            <tr>
+                                <td colspan="8" class="loading">Cargando...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -233,7 +272,7 @@
 
         <!-- ============ VENTAS ============ -->
         <section id="ventas" class="section">
-            <h2>&#128176; Registro de Ventas</h2>
+            <h2>Registro de Ventas</h2>
             <div class="card">
                 <div class="table-wrapper">
                     <table>
@@ -246,10 +285,14 @@
                                 <th>Precio Venta</th>
                                 <th>Forma Pago</th>
                                 <th>Facturado</th>
+                                <th>Anticipo</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="ventas-tbody">
-                            <tr><td colspan="7" class="loading">Cargando...</td></tr>
+                            <tr>
+                                <td colspan="9" class="loading">Cargando...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -258,7 +301,7 @@
 
         <!-- ============ VENDEDORES ============ -->
         <section id="vendedores" class="section">
-            <h2>&#127942; Tablero de Vendedores</h2>
+            <h2>Tablero de Vendedores</h2>
             <div class="card">
                 <div class="table-wrapper">
                     <table>
@@ -272,7 +315,105 @@
                             </tr>
                         </thead>
                         <tbody id="vendedores-tbody">
-                            <tr><td colspan="5" class="loading">Sin datos aun</td></tr>
+                            <tr>
+                                <td colspan="5" class="loading">Sin datos aun</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ COTIZACIONES ============ -->
+        <section id="cotizaciones" class="section">
+            <h2>Cotizaciones</h2>
+            <p class="section-desc">Genera cotizaciones profesionales y descargalas como PDF.</p>
+
+            <div class="card">
+                <h3>Nueva Cotizacion</h3>
+                <form id="form-cotizacion" class="form-grid">
+                    <div class="form-group">
+                        <label for="cot-vendedor">Vendedor *</label>
+                        <input type="text" id="cot-vendedor" placeholder="Nombre del vendedor" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cot-cliente">Cliente *</label>
+                        <input type="text" id="cot-cliente" placeholder="Nombre del cliente" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cot-empresa">Empresa</label>
+                        <input type="text" id="cot-empresa" placeholder="Nombre de la empresa">
+                    </div>
+                    <div class="form-group">
+                        <label for="cot-telefono">Telefono</label>
+                        <input type="text" id="cot-telefono" placeholder="618 123 4567">
+                    </div>
+                    <div class="form-group">
+                        <label for="cot-email">Email</label>
+                        <input type="email" id="cot-email" placeholder="cliente@empresa.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="cot-iva">Incluir IVA (16%)</label>
+                        <select id="cot-iva">
+                            <option value="true">Si - Con IVA</option>
+                            <option value="false">No - Sin IVA</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="cot-direccion">Direccion</label>
+                        <input type="text" id="cot-direccion" placeholder="Direccion del cliente">
+                    </div>
+
+                    <div class="full-width">
+                        <h4 style="margin:1rem 0 0.5rem">Equipos a Cotizar</h4>
+                        <div id="cot-items-container">
+                            <div class="cot-item-row" data-index="0">
+                                <select class="cot-equipo-select" onchange="onEquipoSelect(this)">
+                                    <option value="">Seleccionar equipo...</option>
+                                </select>
+                                <input type="number" class="cot-cantidad" value="1" min="1" placeholder="Cant"
+                                    style="width:70px">
+                                <input type="number" class="cot-precio" step="0.01" min="0"
+                                    placeholder="Precio unitario" style="width:150px">
+                                <input type="text" class="cot-desc" placeholder="Descripcion" style="flex:1">
+                                <button type="button" class="btn btn-sm btn-danger"
+                                    onclick="removeCotItem(this)">X</button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addCotItem()"
+                            style="margin-top:0.5rem">+ Agregar equipo</button>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="cot-notas">Notas adicionales</label>
+                        <textarea id="cot-notas" rows="2" placeholder="Notas opcionales..."></textarea>
+                    </div>
+                    <div class="form-actions full-width">
+                        <button type="submit" class="btn btn-primary">Generar Cotizacion</button>
+                        <button type="reset" class="btn btn-secondary">Limpiar</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>Cotizaciones Generadas</h3>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Folio</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th>Vendedor</th>
+                                <th>Total</th>
+                                <th>IVA</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cotizaciones-tbody">
+                            <tr>
+                                <td colspan="7" class="loading">Cargando...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -280,6 +421,20 @@
         </section>
 
     </main>
+
+    <!-- MODAL COTIZACION PDF -->
+    <div class="modal" id="modal-cotizacion">
+        <div class="modal-content modal-xl">
+            <div class="modal-header">
+                <h3>Vista de Cotizacion</h3>
+                <div>
+                    <button class="btn btn-sm btn-primary" onclick="imprimirCotizacion()">Descargar PDF</button>
+                    <button class="modal-close" onclick="closeModal('modal-cotizacion')">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body" id="cotizacion-print-area"></div>
+        </div>
+    </div>
 
     <!-- MODAL DETALLE -->
     <div class="modal" id="modal-detalle">
@@ -296,7 +451,7 @@
     <div class="modal" id="modal-venta">
         <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h3>&#128176; Registrar Venta</h3>
+                <h3>Registrar Venta</h3>
                 <button class="modal-close" onclick="closeModal('modal-venta')">&times;</button>
             </div>
             <div class="modal-body">
@@ -329,7 +484,9 @@
                     </div>
                     <div class="form-group">
                         <label for="venta-forma-pago">Forma de Pago</label>
-                        <select id="venta-forma-pago"><option value="">Seleccionar...</option></select>
+                        <select id="venta-forma-pago">
+                            <option value="">Seleccionar...</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="venta-facturado">Se Facturo?</label>
@@ -346,9 +503,31 @@
                         <label for="venta-notas">Notas</label>
                         <textarea id="venta-notas" rows="2"></textarea>
                     </div>
+                    <div class="form-group full-width anticipo-section">
+                        <label>Anticipo</label>
+                        <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+                            <select id="venta-anticipo" style="width:120px;">
+                                <option value="false">No</option>
+                                <option value="true">Si</option>
+                            </select>
+                            <div id="anticipo-fields" style="display:none;flex:1;display:none;gap:0.8rem;">
+                                <div style="flex:1;">
+                                    <label for="venta-anticipo-monto" style="font-size:0.75rem;">Monto Anticipo
+                                        *</label>
+                                    <input type="number" id="venta-anticipo-monto" step="0.01" min="0"
+                                        placeholder="$0.00">
+                                </div>
+                                <div style="flex:1;">
+                                    <label for="venta-anticipo-fecha" style="font-size:0.75rem;">Fecha Anticipo</label>
+                                    <input type="date" id="venta-anticipo-fecha">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-actions full-width">
-                        <button type="submit" class="btn btn-success">&#10004; Registrar Venta</button>
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-venta')">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Registrar Venta</button>
+                        <button type="button" class="btn btn-secondary"
+                            onclick="closeModal('modal-venta')">Cancelar</button>
                     </div>
                 </form>
             </div>
@@ -356,10 +535,11 @@
     </div>
 
     <footer class="footer">
-        <p>&#128205; Av. del Sol #329, Durango, Dgo. | &#128222; 618 134 1056</p>
+        <p>Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
         <p>&copy; 2024 DURTRON - Innovacion Industrial</p>
     </footer>
 
     <script src="script.js"></script>
 </body>
+
 </html>
