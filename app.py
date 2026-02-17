@@ -9,9 +9,13 @@ import os
 import json
 import secrets
 import io
+import logging
+import traceback
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__, static_folder='frontend')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'durtron-secret-key-2024-cambiar')
 CORS(app, supports_credentials=True)
 
@@ -1136,7 +1140,9 @@ def create_proveedor():
         conn.close()
         return jsonify({'success': True, 'id': pid, 'message': 'Proveedor creado'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error creating proveedor: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 @app.route('/api/proveedores/<int:pid>', methods=['PUT'])
 def update_proveedor(pid):
@@ -1225,7 +1231,9 @@ def create_requisicion():
         conn.close()
         return jsonify({'success': True, 'id': rid, 'folio': folio, 'message': f'Requisicion {folio} creada'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error creating requisicion: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 @app.route('/api/requisiciones/<int:rid>', methods=['GET'])
 def get_requisicion(rid):
