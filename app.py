@@ -135,15 +135,22 @@ def run_migrations():
         for sql in partes_table:
             try:
                 cur.execute(sql)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Warning: Migracion step skipped: {e}")
+
+        # Tabla equipo_partes migration
+        try:
+             cur.execute("ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)")
+             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS proveedor_nombre VARCHAR(100)")
+        except Exception as e:
+             print(f"Warning: Equipo Partes/Items migration error: {e}")
 
         conn.commit()
         cur.close()
         conn.close()
         print("Migraciones ejecutadas OK")
     except Exception as e:
-        print(f"Error en migraciones: {e}")
+        print(f"Error CRITICO en migraciones: {e}")
 
 run_migrations()
 

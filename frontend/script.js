@@ -1421,18 +1421,18 @@ function addReqItem() {
     const container = document.getElementById('req-items-container');
     const row = document.createElement('div');
     row.className = 'req-item-row';
-    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
+    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 1fr 1fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
 
     row.innerHTML = `
         <span style="text-align:center;font-weight:bold;color:#aaa;">${reqItemCounter}</span>
-        <input type="text" placeholder="Componente" class="req-comp" style="width:100%">
+        <input type="text" placeholder="Componente" class="req-comp" style="width:100%" oninput="checkAutoProvider(this)">
         <input type="text" list="prov-list-${Date.now()}" placeholder="Proveedor" class="req-prov">
         <datalist id="prov-list-${Date.now()}">
              ${AVAILABLE_PROVIDERS.map(p => `<option value="${p.razon_social}">`).join('')}
         </datalist>
         <input type="text" placeholder="Comentarios" class="req-coment">
         <input type="number" placeholder="#" class="req-cant" value="1" min="0" step="0.1" oninput="updateReqRowTotal(this)">
-        <input type="text" placeholder="Un" class="req-unidad" value="pza">
+        <!-- Unidad removed as requested -->
         <input type="number" placeholder="$" class="req-precio" value="0" min="0" step="0.01" oninput="updateReqRowTotal(this)">
         <div style="text-align:center"><input type="checkbox" class="req-iva" onchange="updateReqRowTotal(this)"></div>
         <input type="text" class="req-subtotal" readonly value="$0.00" style="background:#eee; color:#333; text-align:right;">
@@ -1447,6 +1447,28 @@ function addReqItem() {
         if (provName && provName !== '-- Varios / Sin definir --') {
             row.querySelector('.req-prov').value = provName;
         }
+    }
+}
+
+function checkAutoProvider(input) {
+    const row = input.closest('.req-item-row');
+    const provInput = row.querySelector('.req-prov');
+    // Once user manually sets provider, maybe don't overwrite? 
+    // But user asked for "siempre se piden con...". Let's overwrite if empty or if matching rule found.
+    // For now, only if empty to avoid annoying overrides.
+    if (provInput.value.trim() !== '') return;
+
+    const val = input.value.toLowerCase();
+
+    // Rules
+    if (val.includes('acero') || val.includes('4140') || val.includes('1045') || val.includes('estirad') || val.includes('lamina')) {
+        provInput.value = 'Levinson'; // Assuming exact name
+    } else if (val.includes('polea') || val.includes('banda')) {
+        provInput.value = 'Maposa';
+    } else if (val.includes('chumacera') || val.includes('rodamiento')) {
+        provInput.value = 'Herver';
+    } else if (val.includes('motor')) {
+        provInput.value = 'HAB';
     }
 }
 
@@ -1487,7 +1509,7 @@ formReq.addEventListener('submit', async (e) => {
                 proveedor_nombre: row.querySelector('.req-prov').value.trim(),
                 comentario: row.querySelector('.req-coment').value.trim(),
                 cantidad: parseFloat(row.querySelector('.req-cant').value) || 0,
-                unidad: row.querySelector('.req-unidad').value.trim(),
+                unidad: 'pza', // Default since column removed
                 precio_unitario: parseFloat(row.querySelector('.req-precio').value) || 0,
                 tiene_iva: row.querySelector('.req-iva').checked
             });
@@ -1572,23 +1594,33 @@ async function cargarPartesRequisicion(equipoId) {
             if (lastRow) {
                 const compInput = lastRow.querySelector('.req-comp');
                 const cantInput = lastRow.querySelector('.req-cant');
-                const unidadInput = lastRow.querySelector('.req-unidad');
+                // const unidadInput = lastRow.querySelector('.req-unidad'); // Removed
                 const comentInput = lastRow.querySelector('.req-coment');
                 const provSelect = lastRow.querySelector('.req-prov');
-                if (compInput) compInput.value = parte.nombre_parte;
+
+                if (compInput) {
+                    compInput.value = parte.nombre_parte;
+                    // Trigger auto-provider logic
+                    checkAutoProvider(compInput);
+                }
                 if (cantInput) cantInput.value = parte.cantidad || 1;
-                if (unidadInput) unidadInput.value = parte.unidad || 'pza';
-                if (comentInput && parte.descripcion) comentInput.value = parte.descripcion;
-                // Auto-fill provider if available
+                // if (unidadInput) unidadInput.value = parte.unidad || 'pza';
+
+                // User requested NOT to pre-fill comments from description
+                // keeping it empty
+                if (comentInput) comentInput.value = '';
+
+                // Auto-fill provider if available (overrides auto-logic if explicit)
                 if (provSelect && parte.proveedor_id) {
-                    const opts = Array.from(provSelect.options);
-                    const match = opts.find(o => o.value == parte.proveedor_id);
-                    if (match) provSelect.value = parte.proveedor_id;
-                    else if (parte.proveedor_nombre) {
-                        // If ID not found, try matching by name
-                        const matchName = opts.find(o => o.text === parte.proveedor_nombre);
-                        if (matchName) provSelect.value = matchName.value;
+                    // ... existing logic ...
+                    const opts = Array.from(provSelect.list.options); // Input is text with list, options are in list
+                    // Actually, req-prov is input text, not select. The list is dynamic.
+                    // But we can just set the value if we have the name
+                    if (parte.proveedor_nombre) {
+                        provSelect.value = parte.proveedor_nombre;
                     }
+                } else if (provSelect && parte.proveedor_nombre) {
+                    provSelect.value = parte.proveedor_nombre;
                 }
             }
         });
