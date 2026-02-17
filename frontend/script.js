@@ -5,6 +5,7 @@ let inventarioItems = [];
 let ventasData = [];
 let configData = {};
 let dashboardData = {};
+let AVAILABLE_PROVIDERS = []; // Global providers list
 let periodoActual = 'mensual';
 let ingresosChart = null;
 
@@ -26,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadVentas();
         loadVendedores();
         loadCotizaciones();
+        loadProveedores(); // Ensure providers are loaded for Requisitions
     });
 });
 
@@ -1271,15 +1273,7 @@ async function deleteCotizacion(id) {
 // ==================== PROVEEDORES ====================
 let proveedoresData = [];
 
-async function loadProveedores() {
-    try {
-        const res = await fetch(`${API}/api/proveedores`);
-        proveedoresData = await res.json();
-        renderProveedores();
-    } catch (e) {
-        notify('Error al cargar proveedores: ' + e.message, 'error');
-    }
-}
+// loadProveedores moved to consolidated section
 
 function renderProveedores() {
     const tbody = document.getElementById('tabla-proveedores');
@@ -1302,64 +1296,12 @@ function renderProveedores() {
     `).join('');
 }
 
-// Setup form: Proveedor
-document.addEventListener('DOMContentLoaded', () => {
-    const formProv = document.getElementById('form-proveedor');
-    if (formProv) {
-        formProv.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const body = {
-                razon_social: document.getElementById('prov-razon').value.trim(),
-                contacto_nombre: document.getElementById('prov-contacto').value.trim(),
-                correo: document.getElementById('prov-correo').value.trim(),
-                telefono: document.getElementById('prov-telefono').value.trim(),
-                whatsapp: document.getElementById('prov-whatsapp').value.trim(),
-                medio_preferido: document.getElementById('prov-medio').value,
-                notas: document.getElementById('prov-notas').value.trim()
-            };
-            if (!body.razon_social) { notify('Razon social es obligatoria', 'error'); return; }
-            try {
-                const res = await fetch(`${API}/api/proveedores`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                if (data.success) {
-                    notify('Proveedor registrado', 'success');
-                    formProv.reset();
-                    loadProveedores();
-                } else {
-                    notify(data.error || 'Error', 'error');
-                }
-            } catch (e) {
-                notify('Error: ' + e.message, 'error');
-            }
-        });
-    }
-
-});
-
-
-async function deleteProveedor(pid) {
-    if (!confirm('¿Eliminar este proveedor?')) return;
-    try {
-        const res = await fetch(`${API}/api/proveedores/${pid}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.success) {
-            notify('Proveedor eliminado', 'success');
-            loadProveedores();
-        } else {
-            notify(data.error || 'Error', 'error');
-        }
-    } catch (e) {
-        notify('Error: ' + e.message, 'error');
-    }
-}
+// ... event listeners ...
 
 // ==================== REQUISICIONES ====================
-let requisicionesData = [];
-let AVAILABLE_PROVIDERS = []; // Store providers for dropdowns
+// Variables initialized globally now
+// let requisicionesData = [];
+// let AVAILABLE_PROVIDERS = [];
 
 async function loadProveedores() {
     try {
