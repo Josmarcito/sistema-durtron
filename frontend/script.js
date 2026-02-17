@@ -908,6 +908,98 @@ function setupForms() {
             notify('Error: ' + err.message, 'error');
         }
     });
+
+    // Proveedor form
+    document.getElementById('form-proveedor').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const body = {
+                razon_social: document.getElementById('prov-razon').value,
+                contacto_nombre: document.getElementById('prov-contacto').value,
+                correo: document.getElementById('prov-correo').value,
+                telefono: document.getElementById('prov-telefono').value,
+                whatsapp: document.getElementById('prov-whatsapp').value,
+                medio_preferido: document.getElementById('prov-medio').value,
+                notas: document.getElementById('prov-notas').value
+            };
+            const r = await fetch(`${API}/api/proveedores`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const res = await r.json();
+            if (res.success) {
+                notify('Proveedor registrado', 'success');
+                document.getElementById('form-proveedor').reset();
+                loadProveedores();
+            } else {
+                notify(res.error || 'Error', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        }
+    });
+
+    // Requisicion form
+    document.getElementById('form-requisicion').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const items = [];
+            document.querySelectorAll('.req-item-row').forEach(row => {
+                const comp = row.querySelector('.req-comp').value.trim();
+                const provVal = row.querySelector('.req-prov').value.trim();
+                if (comp) {
+                    items.push({
+                        componente: comp,
+                        proveedor_nombre: provVal,
+                        comentario: row.querySelector('.req-coment').value.trim(),
+                        cantidad: parseFloat(row.querySelector('.req-cant').value) || 0,
+                        unidad: 'pza',
+                        precio_unitario: parseFloat(row.querySelector('.req-precio').value) || 0,
+                        tiene_iva: row.querySelector('.req-iva').checked
+                    });
+                }
+            });
+
+            if (items.length === 0) { notify('Agrega al menos un componente', 'error'); return; }
+
+            const mainProvId = document.getElementById('req-proveedor').value;
+            // Validate at least one valid provider logic? No, allowing free text.
+
+            const body = {
+                inventario_id: null, // Always null for generic req
+                equipo_nombre: document.getElementById('req-equipo').selectedOptions[0]?.text || '',
+                no_control: document.getElementById('req-no-control').value.trim(),
+                area: document.getElementById('req-area').value.trim(),
+                proveedor_id: mainProvId || null,
+                notas: document.getElementById('req-notas').value.trim(),
+                emitido_por: document.getElementById('req-emitido').value.trim(),
+                aprobado_por: document.getElementById('req-aprobado').value.trim(),
+                revisado_por: document.getElementById('req-revisado').value.trim(),
+                requerido_por: document.getElementById('req-requerido').value.trim(),
+                items
+            };
+
+            const res = await fetch(`${API}/api/requisiciones`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.success) {
+                notify(`Requisicion ${data.folio} creada`, 'success');
+                closeModal('modal-requisicion');
+                document.getElementById('form-requisicion').reset();
+                document.getElementById('req-items-container').innerHTML = '';
+                reqItemCounter = 0;
+                loadRequisiciones();
+            } else {
+                notify(data.error || 'Error', 'error');
+            }
+        } catch (e) {
+            notify('Error: ' + e.message, 'error');
+        }
+    });
 }
 
 // ===== MODALS =====
@@ -1444,63 +1536,6 @@ function updateReqGrandTotal() {
     if (el) el.textContent = `$${grandTotal.toFixed(2)}`;
 }
 
-formReq.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const items = [];
-    document.querySelectorAll('.req-item-row').forEach(row => {
-        const comp = row.querySelector('.req-comp').value.trim();
-        if (comp) {
-            items.push({
-                componente: comp,
-                proveedor_nombre: row.querySelector('.req-prov').value.trim(),
-                comentario: row.querySelector('.req-coment').value.trim(),
-                cantidad: parseFloat(row.querySelector('.req-cant').value) || 0,
-                unidad: 'pza', // Default since column removed
-                precio_unitario: parseFloat(row.querySelector('.req-precio').value) || 0,
-                tiene_iva: row.querySelector('.req-iva').checked
-            });
-        }
-    });
-
-    if (items.length === 0) { notify('Agrega al menos un componente', 'error'); return; }
-
-    const mainProvId = document.getElementById('req-proveedor').value;
-
-    const body = {
-        inventario_id: null,
-        equipo_nombre: document.getElementById('req-equipo').selectedOptions[0]?.text || '',
-        no_control: document.getElementById('req-no-control').value.trim(),
-        area: document.getElementById('req-area').value.trim(),
-        proveedor_id: mainProvId || null,
-        notas: document.getElementById('req-notas').value.trim(),
-        emitido_por: document.getElementById('req-emitido').value.trim(),
-        aprobado_por: document.getElementById('req-aprobado').value.trim(),
-        revisado_por: document.getElementById('req-revisado').value.trim(),
-        requerido_por: document.getElementById('req-requerido').value.trim(),
-        items
-    };
-
-    try {
-        const res = await fetch(`${API}/api/requisiciones`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        if (data.success) {
-            notify(`Requisicion ${data.folio} creada`, 'success');
-            closeModal('modal-requisicion');
-            formReq.reset();
-            document.getElementById('req-items-container').innerHTML = '';
-            reqItemCounter = 0;
-            loadRequisiciones();
-        } else {
-            notify(data.error || 'Error', 'error');
-        }
-    } catch (e) {
-        notify('Error: ' + e.message, 'error');
-    }
-});
 
 
 function populateReqProveedorSelect() {
