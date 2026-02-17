@@ -185,11 +185,26 @@ def init_db():
             inventario_id INTEGER REFERENCES inventario(id),
             proveedor_id INTEGER REFERENCES proveedores(id),
             equipo_nombre VARCHAR(255),
+            no_control VARCHAR(30),
+            area VARCHAR(100) DEFAULT 'Departamento de Ingeniería',
+            revisado_por VARCHAR(100),
+            requerido_por VARCHAR(100),
             estado VARCHAR(20) DEFAULT 'Pendiente',
             notas TEXT,
+            emitido_por VARCHAR(100),
+            aprobado_por VARCHAR(100),
             fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # Agregar columnas nuevas si no existen (para BD existentes)
+    for col, tipo in [('no_control', "VARCHAR(30)"),
+                      ('area', "VARCHAR(100) DEFAULT 'Departamento de Ingeniería'"),
+                      ('revisado_por', 'VARCHAR(100)'),
+                      ('requerido_por', 'VARCHAR(100)')]:
+        try:
+            cursor.execute(f"ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS {col} {tipo}")
+        except Exception:
+            pass
     print("  OK tabla 'requisiciones'")
 
     # Tabla requisicion_items
@@ -199,9 +214,13 @@ def init_db():
             id SERIAL PRIMARY KEY,
             requisicion_id INTEGER NOT NULL REFERENCES requisiciones(id) ON DELETE CASCADE,
             componente VARCHAR(200) NOT NULL,
+            proveedor_nombre VARCHAR(100),
+            comentario TEXT,
             cantidad INTEGER DEFAULT 1,
             unidad VARCHAR(50) DEFAULT 'pza',
-            precio_estimado DECIMAL(12,2) DEFAULT 0
+            precio_unitario DECIMAL(12,2) DEFAULT 0,
+            tiene_iva BOOLEAN DEFAULT FALSE,
+            precio_estimado DECIMAL(12,2) DEFAULT 0 -- Kept for migration safety
         )
     ''')
     print("  OK tabla 'requisicion_items'")

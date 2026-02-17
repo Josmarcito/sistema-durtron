@@ -70,17 +70,27 @@ def run_migrations():
                 inventario_id INTEGER REFERENCES inventario(id),
                 proveedor_id INTEGER REFERENCES proveedores(id),
                 equipo_nombre VARCHAR(255),
+                no_control VARCHAR(30),
+                area VARCHAR(100) DEFAULT 'Departamento de Ingeniería',
+                revisado_por VARCHAR(100),
+                requerido_por VARCHAR(100),
                 estado VARCHAR(20) DEFAULT 'Pendiente',
                 notas TEXT,
+                emitido_por VARCHAR(100),
+                aprobado_por VARCHAR(100),
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
             """CREATE TABLE IF NOT EXISTS requisicion_items (
                 id SERIAL PRIMARY KEY,
                 requisicion_id INTEGER NOT NULL REFERENCES requisiciones(id) ON DELETE CASCADE,
                 componente VARCHAR(200) NOT NULL,
+                proveedor_nombre VARCHAR(100),
+                comentario TEXT,
                 cantidad INTEGER DEFAULT 1,
                 unidad VARCHAR(50) DEFAULT 'pza',
-                precio_estimado DECIMAL(12,2) DEFAULT 0
+                precio_unitario DECIMAL(12,2) DEFAULT 0,
+                tiene_iva BOOLEAN DEFAULT FALSE,
+                precio_estimado DECIMAL(12,2) DEFAULT 0 -- Kept for migration safety
             )""",
         ]
         for sql in phase_b_tables:
@@ -88,6 +98,26 @@ def run_migrations():
                 cur.execute(sql)
             except Exception:
                 pass
+        
+        # Migraciones adicionales para campos nuevos en Requisiciones (Refinamiento Usuario)
+        refinements = [
+            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS emitido_por VARCHAR(100)",
+            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS aprobado_por VARCHAR(100)",
+            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS no_control VARCHAR(30)",
+            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS area VARCHAR(100) DEFAULT 'Departamento de Ingeniería'",
+            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS revisado_por VARCHAR(100)",
+            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS requerido_por VARCHAR(100)",
+            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS proveedor_nombre VARCHAR(100)",
+            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS comentario TEXT",
+            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS precio_unitario DECIMAL(12,2) DEFAULT 0",
+            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS tiene_iva BOOLEAN DEFAULT FALSE",
+        ]
+        for sql in refinements:
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
+
         conn.commit()
         cur.close()
         conn.close()
@@ -944,19 +974,24 @@ def create_requisicion():
         folio = f"REQ-{anio}-{cnt+1:04d}"
         # Insertar requisicion
         cur.execute('''
-            INSERT INTO requisiciones (folio, inventario_id, proveedor_id, equipo_nombre, notas)
-            VALUES (%s,%s,%s,%s,%s) RETURNING id
+            INSERT INTO requisiciones (folio, inventario_id, proveedor_id, equipo_nombre, no_control, area, revisado_por, requerido_por, notas, emitido_por, aprobado_por)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (folio, d.get('inventario_id'), d.get('proveedor_id'),
-              d.get('equipo_nombre',''), d.get('notas','')))
+              d.get('equipo_nombre',''), d.get('no_control',''), 
+              d.get('area','Departamento de Ingeniería'),
+              d.get('revisado_por',''), d.get('requerido_por',''),
+              d.get('notas',''),
+              d.get('emitido_por',''), d.get('aprobado_por','')))
         rid = cur.fetchone()['id']
         # Insertar items
         items = d.get('items', [])
         for item in items:
             cur.execute('''
-                INSERT INTO requisicion_items (requisicion_id, componente, cantidad, unidad, precio_estimado)
-                VALUES (%s,%s,%s,%s,%s)
-            ''', (rid, item.get('componente',''), item.get('cantidad',1),
-                  item.get('unidad','pza'), item.get('precio_estimado',0)))
+                INSERT INTO requisicion_items (requisicion_id, componente, proveedor_nombre, comentario, cantidad, unidad, precio_unitario, tiene_iva)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            ''', (rid, item.get('componente',''), item.get('proveedor_nombre',''), item.get('comentario',''),
+                  item.get('cantidad',1), item.get('unidad','pza'), 
+                  item.get('precio_unitario',0), item.get('tiene_iva',False)))
         conn.commit()
         cur.close()
         conn.close()
@@ -970,7 +1005,7 @@ def get_requisicion(rid):
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
-            SELECT r.*, p.razon_social as proveedor_nombre, p.correo as proveedor_correo,
+            SELECT r.*, p.razon_social as proveedor_nombre_header, p.correo as proveedor_correo,
                    p.telefono as proveedor_telefono, p.whatsapp as proveedor_whatsapp
             FROM requisiciones r
             LEFT JOIN proveedores p ON r.proveedor_id = p.id
@@ -1026,54 +1061,77 @@ def enviar_requisicion_email(rid):
         smtp_pass = os.environ.get('SMTP_PASS', '')
         smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
         smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+        
+        target_proveedor = request.args.get('proveedor')
 
         if not smtp_user or not smtp_pass:
             return jsonify({'error': 'Credenciales SMTP no configuradas. Configure SMTP_USER y SMTP_PASS en variables de entorno.'}), 400
 
-        # Obtener datos de la requisicion
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('''
-            SELECT r.*, p.razon_social, p.correo as proveedor_correo, p.contacto_nombre
-            FROM requisiciones r
-            LEFT JOIN proveedores p ON r.proveedor_id = p.id
-            WHERE r.id=%s
-        ''', (rid,))
+        
+        cur.execute('SELECT * FROM requisiciones WHERE id=%s', (rid,))
         req = cur.fetchone()
         if not req:
             return jsonify({'error': 'Requisicion no encontrada'}), 404
-        if not req.get('proveedor_correo'):
-            return jsonify({'error': 'El proveedor no tiene correo registrado'}), 400
+            
+        # Filter items and get provider info
+        if target_proveedor:
+            cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s AND proveedor_nombre=%s ORDER BY id', (rid, target_proveedor))
+            cur.execute('SELECT * FROM proveedores WHERE razon_social=%s', (target_proveedor,))
+            prov_data = cur.fetchone()
+        else:
+            cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
+            prov_data = None
+            if req.get('proveedor_id'):
+                cur.execute('SELECT * FROM proveedores WHERE id=%s', (req['proveedor_id'],))
+                prov_data = cur.fetchone()
 
-        cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
+            # If no provider data found in main, but items have providers?
+            # We can't batch send to everyone in one email easily.
+            # So if no target_provider is set, and main provider is set, send to main.
+            # If main provider is NOT set, we can't send.
+        
         items = cur.fetchall()
         cur.close()
         conn.close()
 
-        # Construir email
+        if not items:
+            return jsonify({'error': 'No hay items para enviar (o para este proveedor)'}), 400
+            
+        if not prov_data:
+             return jsonify({'error': f'No se encontraron datos de contacto para el proveedor: {target_proveedor if target_proveedor else "Principal"}'}), 400
+
+        dest_email = prov_data.get('correo')
+        if not dest_email:
+            return jsonify({'error': f'El proveedor {prov_data["razon_social"]} no tiene correo registrado'}), 400
+
         items_text = "\n".join([
-            f"  - {it['componente']}: {it['cantidad']} {it['unidad']}"
+            f"  - {it['componente']} ({it.get('comentario') or ''}): {it['cantidad']} {it['unidad']}"
             for it in items
         ])
-        body = f"""Estimado/a {req.get('contacto_nombre', req['razon_social'])},
+        
+        body = f"""Estimado/a {prov_data.get('contacto_nombre', prov_data['razon_social'])},
 
-Le enviamos la requisicion {req['folio']} de DURTRON para el equipo: {req.get('equipo_nombre','')}.
+Le enviamos la solicitud de cotización/pedido: {req['folio']} 
+Proyecto / Referencia: {req.get('equipo_nombre','')}
 
-Componentes requeridos:
+Partidas requeridas:
 {items_text}
 
 Notas: {req.get('notas', 'N/A')}
 
-Favor de enviar cotizacion a la brevedad.
+Solicitado por: {req.get('emitido_por', 'DURTRON')}
+
+Favor de confirmar recepción y tiempos de entrega.
 
 Saludos,
 DURTRON - Innovacion Industrial
-Tel: 618 134 1056
 """
         msg = MIMEMultipart()
         msg['From'] = smtp_user
-        msg['To'] = req['proveedor_correo']
-        msg['Subject'] = f"Requisicion {req['folio']} - DURTRON"
+        msg['To'] = dest_email
+        msg['Subject'] = f"Requisicion {req['folio']} - {prov_data['razon_social']} - DURTRON"
         msg.attach(MIMEText(body, 'plain'))
 
         server = smtplib.SMTP(smtp_host, smtp_port)
@@ -1082,42 +1140,278 @@ Tel: 618 134 1056
         server.send_message(msg)
         server.quit()
 
-        return jsonify({'success': True, 'message': f'Email enviado a {req["proveedor_correo"]}'})
+        return jsonify({'success': True, 'message': f'Email enviado a {dest_email}'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/requisiciones/<int:rid>/whatsapp-url', methods=['GET'])
 def get_whatsapp_url(rid):
     try:
+        target_proveedor = request.args.get('proveedor')
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('''
-            SELECT r.*, p.whatsapp, p.telefono, p.razon_social
-            FROM requisiciones r LEFT JOIN proveedores p ON r.proveedor_id = p.id
-            WHERE r.id=%s
-        ''', (rid,))
+        cur.execute('SELECT * FROM requisiciones WHERE id=%s', (rid,))
         req = cur.fetchone()
-        if not req:
-            return jsonify({'error': 'Requisicion no encontrada'}), 404
-        cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
-        items = cur.fetchall()
+        if not req: return jsonify({'error': 'Requisicion no encontrada'}), 404
+
+        prov_data = None
+        if target_proveedor:
+            cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s AND proveedor_nombre=%s', (rid, target_proveedor))
+            items = cur.fetchall()
+            cur.execute('SELECT * FROM proveedores WHERE razon_social=%s', (target_proveedor,))
+            prov_data = cur.fetchone()
+        else:
+            cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s', (rid,))
+            items = cur.fetchall()
+            if req.get('proveedor_id'):
+                cur.execute('SELECT * FROM proveedores WHERE id=%s', (req['proveedor_id'],))
+                prov_data = cur.fetchone()
+        
         cur.close()
         conn.close()
 
-        tel = (req.get('whatsapp') or req.get('telefono') or '').replace(' ','').replace('-','').replace('+','')
-        if not tel:
-            return jsonify({'error': 'El proveedor no tiene telefono/WhatsApp registrado'}), 400
+        if not items: return jsonify({'error': 'No hay items'}), 400
+        if not prov_data: return jsonify({'error': 'No se encontraron datos del proveedor'}), 400
 
-        items_text = "%0A".join([f"- {it['componente']}: {it['cantidad']} {it['unidad']}" for it in items])
-        mensaje = (f"Hola {req.get('razon_social','')},%0A%0A"
-                   f"Le enviamos la requisicion *{req['folio']}* de DURTRON para:%0A"
-                   f"Equipo: {req.get('equipo_nombre','')}%0A%0A"
-                   f"Componentes:%0A{items_text}%0A%0A"
-                   f"Favor de enviar cotizacion. Gracias!")
-        url = f"https://wa.me/{tel}?text={mensaje}"
-        return jsonify({'success': True, 'url': url})
+        tel = (prov_data.get('whatsapp') or prov_data.get('telefono') or '').replace(' ','').replace('-','').replace('+','')
+        if not tel: return jsonify({'error': 'El proveedor no tiene telefono/WhatsApp'}), 400
+
+        items_text = "%0A".join([f"- {it['componente']} ({it.get('cantidad')} {it['unidad']})" for it in items])
+        msg = f"Hola {prov_data.get('razon_social')}, le enviamos de DURTRON:%0AProyecto: {req.get('equipo_nombre')}%0A%0A{items_text}%0A%0ANotas: {req.get('notas','')}"
+        
+        return jsonify({'success': True, 'url': f"https://wa.me/{tel}?text={msg}"})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ==================== ETIQUETA DESDE REQUISICION ====================
+@app.route('/api/requisiciones/<int:rid>/etiqueta', methods=['POST'])
+def generar_etiqueta_requisicion(rid):
+    """Genera etiqueta PNG con datos enviados en el body (o leidos de la req)"""
+    try:
+        d = request.json or {}
+
+        # Datos de la etiqueta vienen del formulario del usuario
+        equipo = d.get('equipo', '')
+        modelo = d.get('modelo', '')
+        capacidad = d.get('capacidad', '')
+        potencia = d.get('potencia', '')
+        apertura = d.get('apertura', '')
+        tamano_alimentacion = d.get('tamano_alimentacion', '')
+        peso = d.get('peso', '')
+        fecha_fabricacion = d.get('fecha_fabricacion', '')
+        numero_serie = d.get('numero_serie', '')
+
+        # Crear imagen de etiqueta 800x420
+        W, H = 800, 420
+        img = Image.new('RGB', (W, H), '#FFFFFF')
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font_title = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 28)
+            font_subtitle = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 12)
+            font_label = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 11)
+            font_value = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 13)
+            font_footer = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 10)
+            font_badge = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 11)
+        except Exception:
+            font_title = ImageFont.load_default()
+            font_subtitle = font_title
+            font_label = font_title
+            font_value = font_title
+            font_footer = font_title
+            font_badge = font_title
+
+        # Header: DURTRON
+        draw.text((30, 20), 'DURTRON', fill='#000000', font=font_title)
+        draw.text((30, 52), 'INNOVACION INDUSTRIAL', fill='#555555', font=font_subtitle)
+
+        # Badge: Calidad Industrial
+        draw.text((550, 20), 'Calidad Industrial', fill='#333333', font=font_badge)
+        draw.text((550, 38), 'Durtron Planta 1 Durango', fill='#555555', font=font_badge)
+
+        # Linea separadora
+        draw.line([(25, 72), (W-25, 72)], fill='#000000', width=2)
+
+        # Grid de datos - 3 columnas x 3 filas
+        campos = [
+            ('Equipo', equipo or '-'),
+            ('Apertura', apertura or '-'),
+            ('Peso del Equipo', peso or '-'),
+            ('Modelo', modelo or '-'),
+            ('Tamano de Alimentacion', tamano_alimentacion or '-'),
+            ('Fecha de Fabricacion', fecha_fabricacion or '-'),
+            ('Capacidad', capacidad or '-'),
+            ('Potencia', potencia or '-'),
+            ('Numero de Serie', numero_serie or '-'),
+        ]
+
+        col_w = (W - 60) // 3
+        start_y = 85
+        row_h = 65
+
+        for idx, (label, value) in enumerate(campos):
+            col = idx % 3
+            row = idx // 3
+            x = 30 + col * col_w
+            y = start_y + row * row_h
+
+            draw.text((x, y), label, fill='#666666', font=font_label)
+            box_y = y + 16
+            draw.rectangle([(x, box_y), (x + col_w - 15, box_y + 28)], outline='#000000', width=1)
+            val_str = str(value)[:25]
+            draw.text((x + 6, box_y + 6), val_str, fill='#000000', font=font_value)
+
+        # Footer
+        footer_y = start_y + 3 * row_h + 15
+        draw.line([(25, footer_y), (W-25, footer_y)], fill='#000000', width=1)
+        footer_y += 10
+        draw.text((30, footer_y), '6181341056', fill='#333333', font=font_footer)
+        draw.text((280, footer_y), 'contacto@durtron.com', fill='#333333', font=font_footer)
+        draw.text((560, footer_y), 'www.durtron.com', fill='#333333', font=font_footer)
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+
+        serie = (numero_serie or equipo or 'etiqueta').replace(' ', '_')
+        return Response(
+            buf.getvalue(),
+            mimetype='image/png',
+            headers={'Content-Disposition': f'attachment; filename=etiqueta_{serie}.png'}
+        )
+    except Exception as e:
+        print(f'Error generando etiqueta req: {e}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>/enviar-etiqueta', methods=['POST'])
+def enviar_etiqueta_email(rid):
+    """Genera la etiqueta PNG y la envia como adjunto al email indicado"""
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.image import MIMEImage
+
+        d = request.json or {}
+        dest_email = d.get('email', '')
+        if not dest_email:
+            return jsonify({'error': 'Debe indicar un correo destino'}), 400
+
+        smtp_user = os.environ.get('SMTP_USER', '')
+        smtp_pass = os.environ.get('SMTP_PASS', '')
+        smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+
+        if not smtp_user or not smtp_pass:
+            return jsonify({'error': 'Credenciales SMTP no configuradas. Configure SMTP_USER y SMTP_PASS.'}), 400
+
+        # Get req info
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM requisiciones WHERE id=%s', (rid,))
+        req = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not req:
+            return jsonify({'error': 'Requisicion no encontrada'}), 404
+
+        # Generate label image
+        equipo = d.get('equipo', req.get('equipo_nombre', ''))
+        W, H = 800, 420
+        img = Image.new('RGB', (W, H), '#FFFFFF')
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font_title = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 28)
+            font_subtitle = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 12)
+            font_label = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 11)
+            font_value = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 13)
+            font_footer = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 10)
+            font_badge = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 11)
+        except Exception:
+            font_title = ImageFont.load_default()
+            font_subtitle = font_title
+            font_label = font_title
+            font_value = font_title
+            font_footer = font_title
+            font_badge = font_title
+
+        draw.text((30, 20), 'DURTRON', fill='#000000', font=font_title)
+        draw.text((30, 52), 'INNOVACION INDUSTRIAL', fill='#555555', font=font_subtitle)
+        draw.text((550, 20), 'Calidad Industrial', fill='#333333', font=font_badge)
+        draw.text((550, 38), 'Durtron Planta 1 Durango', fill='#555555', font=font_badge)
+        draw.line([(25, 72), (W-25, 72)], fill='#000000', width=2)
+
+        campos = [
+            ('Equipo', equipo or '-'),
+            ('Apertura', d.get('apertura', '') or '-'),
+            ('Peso del Equipo', d.get('peso', '') or '-'),
+            ('Modelo', d.get('modelo', '') or '-'),
+            ('Tamano de Alimentacion', d.get('tamano_alimentacion', '') or '-'),
+            ('Fecha de Fabricacion', d.get('fecha_fabricacion', '') or '-'),
+            ('Capacidad', d.get('capacidad', '') or '-'),
+            ('Potencia', d.get('potencia', '') or '-'),
+            ('Numero de Serie', d.get('numero_serie', '') or '-'),
+        ]
+
+        col_w = (W - 60) // 3
+        start_y = 85
+        row_h = 65
+
+        for idx, (label, value) in enumerate(campos):
+            col = idx % 3
+            row = idx // 3
+            x = 30 + col * col_w
+            y = start_y + row * row_h
+            draw.text((x, y), label, fill='#666666', font=font_label)
+            box_y = y + 16
+            draw.rectangle([(x, box_y), (x + col_w - 15, box_y + 28)], outline='#000000', width=1)
+            draw.text((x + 6, box_y + 6), str(value)[:25], fill='#000000', font=font_value)
+
+        footer_y = start_y + 3 * row_h + 15
+        draw.line([(25, footer_y), (W-25, footer_y)], fill='#000000', width=1)
+        footer_y += 10
+        draw.text((30, footer_y), '6181341056', fill='#333333', font=font_footer)
+        draw.text((280, footer_y), 'contacto@durtron.com', fill='#333333', font=font_footer)
+        draw.text((560, footer_y), 'www.durtron.com', fill='#333333', font=font_footer)
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        img_bytes = buf.getvalue()
+
+        # Send email with attachment
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = dest_email
+        msg['Subject'] = f"Etiqueta de Equipo - {equipo} - DURTRON"
+
+        body_text = f"""Adjuntamos la etiqueta de identificación del equipo:
+
+Equipo: {equipo}
+Proyecto/Requisición: {req.get('folio', '')} - {req.get('equipo_nombre', '')}
+
+Saludos,
+DURTRON - Innovacion Industrial
+Tel: 618 134 1056
+"""
+        msg.attach(MIMEText(body_text, 'plain'))
+
+        img_attachment = MIMEImage(img_bytes, name=f'etiqueta_{equipo.replace(" ", "_")}.png')
+        img_attachment.add_header('Content-Disposition', 'attachment', filename=f'etiqueta_{equipo.replace(" ", "_")}.png')
+        msg.attach(img_attachment)
+
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+
+        return jsonify({'success': True, 'message': f'Etiqueta enviada a {dest_email}'})
+    except Exception as e:
+        print(f'Error enviando etiqueta: {e}')
+        return jsonify({'error': str(e)}), 500
+
 
 # ==================== PLANTILLAS COMPONENTES ====================
 @app.route('/api/plantillas', methods=['GET'])

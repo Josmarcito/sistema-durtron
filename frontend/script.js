@@ -126,7 +126,16 @@ async function loadDashboard() {
         renderPeriodo();
     } catch (e) {
         console.error('Error dashboard:', e);
-        notify('Error al cargar dashboard: ' + e.message, 'error');
+        // Fail silently for dashboard to avoid annoying alerts on connection issues
+        // notify('Error al cargar dashboard: ' + e.message, 'error');
+        document.getElementById('stat-catalogo').textContent = '-';
+        document.getElementById('stat-inventario').textContent = '-';
+        document.getElementById('stat-ingreso-neto').textContent = '$0.00';
+        document.getElementById('stat-ingreso-iva').textContent = '$0.00';
+        document.getElementById('stat-utilidad').textContent = '$0.00';
+        document.getElementById('stat-anticipos').textContent = '$0.00';
+        document.getElementById('stat-saldo').textContent = '$0.00';
+        document.getElementById('stat-total-ventas').textContent = '0';
     }
 }
 
@@ -1138,51 +1147,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Setup form: Requisicion
-    const formReq = document.getElementById('form-requisicion');
-    if (formReq) {
-        formReq.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const items = [];
-            document.querySelectorAll('#req-items-container .cot-item-row').forEach(row => {
-                const comp = row.querySelector('.req-comp').value.trim();
-                if (comp) {
-                    items.push({
-                        componente: comp,
-                        cantidad: parseInt(row.querySelector('.req-cant').value) || 1,
-                        unidad: row.querySelector('.req-unidad').value.trim() || 'pza',
-                        precio_estimado: parseFloat(row.querySelector('.req-precio').value) || 0
-                    });
-                }
-            });
-            if (items.length === 0) { notify('Agrega al menos un componente', 'error'); return; }
-            const body = {
-                equipo_nombre: document.getElementById('req-equipo').value.trim(),
-                proveedor_id: document.getElementById('req-proveedor').value || null,
-                notas: document.getElementById('req-notas').value.trim(),
-                items
-            };
-            try {
-                const res = await fetch(`${API}/api/requisiciones`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                if (data.success) {
-                    notify(`Requisicion ${data.folio} creada`, 'success');
-                    closeModal('modal-requisicion');
-                    formReq.reset();
-                    loadRequisiciones();
-                } else {
-                    notify(data.error || 'Error', 'error');
-                }
-            } catch (e) {
-                notify('Error: ' + e.message, 'error');
-            }
-        });
-    }
 });
+
 
 async function deleteProveedor(pid) {
     if (!confirm('¿Eliminar este proveedor?')) return;
@@ -1202,6 +1168,20 @@ async function deleteProveedor(pid) {
 
 // ==================== REQUISICIONES ====================
 let requisicionesData = [];
+let AVAILABLE_PROVIDERS = []; // Store providers for dropdowns
+
+async function loadProveedores() {
+    try {
+        const res = await fetch(`${API}/api/proveedores`);
+        const data = await res.json();
+        AVAILABLE_PROVIDERS = data; // Update global
+        proveedoresData = data;
+        renderProveedores();
+        populateReqProveedorSelect(); // Populate main select
+    } catch (e) {
+        notify('Error al cargar proveedores: ' + e.message, 'error');
+    }
+}
 
 async function loadRequisiciones() {
     try {
@@ -1223,6 +1203,7 @@ function renderRequisiciones() {
         'Pendiente': 'badge-planta1',
         'Enviada': 'badge-cotizacion',
         'Recibida': 'badge-si',
+        'Recibida Parcial': 'badge-warning',
         'Cancelada': 'badge-no'
     };
     tbody.innerHTML = requisicionesData.map(r => {
@@ -1230,37 +1211,143 @@ function renderRequisiciones() {
         return `
         <tr>
             <td><strong>${r.folio}</strong></td>
+            <td>${r.no_control || '-'}</td>
             <td>${r.equipo_nombre || '-'}</td>
-            <td>${r.proveedor_nombre || 'Sin asignar'}</td>
             <td><span class="badge ${estadoBadge[r.estado] || 'badge-planta1'}">${r.estado}</span></td>
             <td>${fecha}</td>
             <td class="action-buttons">
-                <button class="btn btn-primary btn-sm" onclick="verRequisicion(${r.id})">Ver</button>
+                <button class="btn btn-primary btn-sm" onclick="verRequisicion(${r.id})">Ver / Gestionar</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteRequisicion(${r.id})">&#10006;</button>
             </td>
         </tr>`;
     }).join('');
 }
 
+let reqItemCounter = 0;
 function addReqItem() {
+    reqItemCounter++;
     const container = document.getElementById('req-items-container');
     const row = document.createElement('div');
-    row.className = 'cot-item-row';
+    row.className = 'req-item-row';
+    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
+
     row.innerHTML = `
-        <input type="text" placeholder="Componente" style="flex:2" class="req-comp">
-        <input type="number" placeholder="Cant." style="width:70px" class="req-cant" value="1" min="1">
-        <input type="text" placeholder="Unidad" style="width:80px" class="req-unidad" value="pza">
-        <input type="number" placeholder="$ Est." style="width:100px" class="req-precio" step="0.01" value="0">
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#10006;</button>
+        <span style="text-align:center;font-weight:bold;color:#aaa;">${reqItemCounter}</span>
+        <input type="text" placeholder="Componente" class="req-comp" style="width:100%">
+        <input type="text" list="prov-list-${Date.now()}" placeholder="Proveedor" class="req-prov">
+        <datalist id="prov-list-${Date.now()}">
+             ${AVAILABLE_PROVIDERS.map(p => `<option value="${p.razon_social}">`).join('')}
+        </datalist>
+        <input type="text" placeholder="Comentarios" class="req-coment">
+        <input type="number" placeholder="#" class="req-cant" value="1" min="0" step="0.1" oninput="updateReqRowTotal(this)">
+        <input type="text" placeholder="Un" class="req-unidad" value="pza">
+        <input type="number" placeholder="$" class="req-precio" value="0" min="0" step="0.01" oninput="updateReqRowTotal(this)">
+        <div style="text-align:center"><input type="checkbox" class="req-iva" onchange="updateReqRowTotal(this)"></div>
+        <input type="text" class="req-subtotal" readonly value="$0.00" style="background:#eee; color:#333; text-align:right;">
+        <input type="text" class="req-total" readonly value="$0.00" style="background:#eee; color:#333; font-weight:bold; text-align:right;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); updateReqGrandTotal()">&#10006;</button>
     `;
     container.appendChild(row);
+    // Inherit Main Provider if selected
+    const mainProv = document.getElementById('req-proveedor');
+    if (mainProv && mainProv.value) {
+        const provName = mainProv.options[mainProv.selectedIndex].text;
+        if (provName && provName !== '-- Varios / Sin definir --') {
+            row.querySelector('.req-prov').value = provName;
+        }
+    }
 }
+
+function updateReqRowTotal(el) {
+    const row = el.closest('.req-item-row');
+    const cant = parseFloat(row.querySelector('.req-cant').value) || 0;
+    const precio = parseFloat(row.querySelector('.req-precio').value) || 0;
+    const hasIva = row.querySelector('.req-iva').checked;
+
+    const subtotal = cant * precio;
+    const total = hasIva ? subtotal * 1.16 : subtotal;
+
+    row.querySelector('.req-subtotal').value = `$${subtotal.toFixed(2)}`;
+    row.querySelector('.req-total').value = `$${total.toFixed(2)}`;
+    updateReqGrandTotal();
+}
+
+function updateReqGrandTotal() {
+    let grandTotal = 0;
+    document.querySelectorAll('#req-items-container .req-item-row').forEach(row => {
+        const cant = parseFloat(row.querySelector('.req-cant').value) || 0;
+        const precio = parseFloat(row.querySelector('.req-precio').value) || 0;
+        const hasIva = row.querySelector('.req-iva').checked;
+        grandTotal += (cant * precio) * (hasIva ? 1.16 : 1.0);
+    });
+    const el = document.getElementById('req-total-general');
+    if (el) el.textContent = `$${grandTotal.toFixed(2)}`;
+}
+
+formReq.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const items = [];
+    document.querySelectorAll('.req-item-row').forEach(row => {
+        const comp = row.querySelector('.req-comp').value.trim();
+        if (comp) {
+            items.push({
+                componente: comp,
+                proveedor_nombre: row.querySelector('.req-prov').value.trim(),
+                comentario: row.querySelector('.req-coment').value.trim(),
+                cantidad: parseFloat(row.querySelector('.req-cant').value) || 0,
+                unidad: row.querySelector('.req-unidad').value.trim(),
+                precio_unitario: parseFloat(row.querySelector('.req-precio').value) || 0,
+                tiene_iva: row.querySelector('.req-iva').checked
+            });
+        }
+    });
+
+    if (items.length === 0) { notify('Agrega al menos un componente', 'error'); return; }
+
+    const mainProvId = document.getElementById('req-proveedor').value;
+
+    const body = {
+        inventario_id: null,
+        equipo_nombre: document.getElementById('req-equipo').value.trim(),
+        no_control: document.getElementById('req-no-control').value.trim(),
+        area: document.getElementById('req-area').value.trim(),
+        proveedor_id: mainProvId || null,
+        notas: document.getElementById('req-notas').value.trim(),
+        emitido_por: document.getElementById('req-emitido').value.trim(),
+        aprobado_por: document.getElementById('req-aprobado').value.trim(),
+        revisado_por: document.getElementById('req-revisado').value.trim(),
+        requerido_por: document.getElementById('req-requerido').value.trim(),
+        items
+    };
+
+    try {
+        const res = await fetch(`${API}/api/requisiciones`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            notify(`Requisicion ${data.folio} creada`, 'success');
+            closeModal('modal-requisicion');
+            formReq.reset();
+            document.getElementById('req-items-container').innerHTML = '';
+            reqItemCounter = 0;
+            loadRequisiciones();
+        } else {
+            notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+});
+
 
 function populateReqProveedorSelect() {
     const sel = document.getElementById('req-proveedor');
     if (!sel) return;
-    sel.innerHTML = '<option value="">-- Sin proveedor --</option>';
-    proveedoresData.forEach(p => {
+    sel.innerHTML = '<option value="">-- Varios / Sin definir --</option>';
+    AVAILABLE_PROVIDERS.forEach(p => {
         sel.innerHTML += `<option value="${p.id}">${p.razon_social}</option>`;
     });
 }
@@ -1273,32 +1360,170 @@ async function verRequisicion(rid) {
         const res = await fetch(`${API}/api/requisiciones/${rid}`);
         const r = await res.json();
         document.getElementById('req-detalle-titulo').textContent = `Requisicion ${r.folio}`;
-        const itemsHtml = (r.items || []).map(it => `
-            <tr>
-                <td>${it.componente}</td>
-                <td>${it.cantidad}</td>
-                <td>${it.unidad}</td>
-                <td>$${Number(it.precio_estimado || 0).toFixed(2)}</td>
-            </tr>
-        `).join('');
-        body.innerHTML = `
-            <div style="margin-bottom:1rem">
-                <p><strong>Folio:</strong> ${r.folio}</p>
-                <p><strong>Equipo:</strong> ${r.equipo_nombre || '-'}</p>
-                <p><strong>Proveedor:</strong> ${r.proveedor_nombre || 'Sin asignar'}</p>
-                <p><strong>Estado:</strong> <span class="badge badge-planta1">${r.estado}</span></p>
-                <p><strong>Notas:</strong> ${r.notas || '-'}</p>
+
+        // Calculate totals
+        let totalGeneral = 0;
+        const itemsByProv = {};
+
+        (r.items || []).forEach(it => {
+            const sub = (parseFloat(it.precio_unitario) || 0) * (parseFloat(it.cantidad) || 0);
+            const rowTotal = it.tiene_iva ? sub * 1.16 : sub;
+            totalGeneral += rowTotal;
+
+            const pName = it.proveedor_nombre || 'Sin Asignar';
+            if (!itemsByProv[pName]) itemsByProv[pName] = [];
+            itemsByProv[pName].push({ ...it, subtotal: sub, rowTotal });
+        });
+
+        // Header
+        const headerInfo = `
+            <div style="margin-bottom:1rem; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+                <div>
+                    <p><strong>Folio:</strong> ${r.folio}</p>
+                    <p><strong>No. Control:</strong> ${r.no_control || '-'}</p>
+                    <p><strong>Proyecto:</strong> ${r.equipo_nombre || '-'}</p>
+                </div>
+                <div>
+                    <p><strong>Área:</strong> ${r.area || '-'}</p>
+                    <p><strong>Emitido por:</strong> ${r.emitido_por || '-'}</p>
+                    <p><strong>Aprobado por:</strong> ${r.aprobado_por || '-'}</p>
+                </div>
+                <div>
+                    <p><strong>Revisado por:</strong> ${r.revisado_por || '-'}</p>
+                    <p><strong>Requerido por:</strong> ${r.requerido_por || '-'}</p>
+                    <p><strong>Fecha:</strong> ${new Date(r.fecha_creacion).toLocaleDateString('es-MX')}</p>
+                    <p><strong>Estado:</strong> <span class="badge badge-info">${r.estado}</span></p>
+                </div>
+                <div style="grid-column: span 3;">
+                     <p><strong>Notas:</strong> ${r.notas || '-'}</p>
+                     <p style="font-size:1.1rem;"><strong>Total General:</strong> <span style="color:var(--accent); font-weight:bold;">$${totalGeneral.toFixed(2)}</span></p>
+                </div>
             </div>
-            <div class="table-wrapper">
+        `;
+
+        // Items Table
+        let itemsHtml = `
+            <div class="table-wrapper" style="margin-bottom:1rem;">
                 <table>
-                    <thead><tr><th>Componente</th><th>Cant.</th><th>Unidad</th><th>Precio Est.</th></tr></thead>
-                    <tbody>${itemsHtml || '<tr><td colspan="4" class="loading">Sin componentes</td></tr>'}</tbody>
-                </table>
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>Componente</th>
+                            <th>Proveedor</th>
+                            <th>Comentario</th>
+                            <th>Cant</th>
+                            <th>Unidad</th>
+                            <th>P.Unit</th>
+                            <th>IVA</th>
+                            <th>Subtotal</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        (r.items || []).forEach((it, idx) => {
+            const sub = (it.cantidad * it.precio_unitario);
+            const tot = it.tiene_iva ? sub * 1.16 : sub;
+            itemsHtml += `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td>${it.componente}</td>
+                    <td>${it.proveedor_nombre || '-'}</td>
+                    <td><small>${it.comentario || ''}</small></td>
+                    <td>${it.cantidad}</td>
+                    <td>${it.unidad}</td>
+                    <td>$${Number(it.precio_unitario).toFixed(2)}</td>
+                    <td>${it.tiene_iva ? 'Sí' : 'No'}</td>
+                    <td>$${sub.toFixed(2)}</td>
+                    <td><strong>$${tot.toFixed(2)}</strong></td>
+                </tr>
+            `;
+        });
+
+        itemsHtml += `</tbody></table></div>`;
+
+        // Send Actions
+        let sendActionsHtml = '<div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-top:10px;"><h4>📤 Enviar Pedidos por Proveedor</h4>';
+
+        Object.keys(itemsByProv).forEach(pName => {
+            if (pName === 'Sin Asignar') return;
+            const provTotal = itemsByProv[pName].reduce((s, i) => s + i.rowTotal, 0);
+            sendActionsHtml += `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px; margin-bottom:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
+                    <span><strong>${pName}</strong> (${itemsByProv[pName].length} partidas - $${provTotal.toFixed(2)})</span>
+                    <div style="gap:5px; display:flex;">
+                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName}')">📱 WhatsApp</button>
+                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName}')">📧 Email</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (Object.keys(itemsByProv).length === 0 || (Object.keys(itemsByProv).length === 1 && itemsByProv['Sin Asignar'])) {
+            sendActionsHtml += '<p style="color:#888; font-style:italic;">Asigne proveedores a las partidas para ver opciones de envío.</p>';
+        }
+        sendActionsHtml += '</div>';
+
+        // Etiqueta Section
+        const etiquetaHtml = `
+            <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; margin-top:15px; border:1px solid rgba(255,255,255,0.1);">
+                <h4>🏷 Generar Etiqueta de Equipo</h4>
+                <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Llena los datos del equipo para generar la etiqueta PNG. Puedes descargarla o enviarla por email.</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                    <div class="form-group">
+                        <label>Equipo</label>
+                        <input type="text" id="etq-equipo" value="${r.equipo_nombre || ''}" placeholder="Nombre del equipo">
+                    </div>
+                    <div class="form-group">
+                        <label>Modelo</label>
+                        <input type="text" id="etq-modelo" placeholder="Modelo">
+                    </div>
+                    <div class="form-group">
+                        <label>Capacidad</label>
+                        <input type="text" id="etq-capacidad" placeholder="Ej: 500 Kg/hr">
+                    </div>
+                    <div class="form-group">
+                        <label>Potencia Motor</label>
+                        <input type="text" id="etq-potencia" placeholder="Ej: 15 HP">
+                    </div>
+                    <div class="form-group">
+                        <label>Apertura</label>
+                        <input type="text" id="etq-apertura" placeholder="Ej: 3/8\"">
+                    </div>
+                    <div class="form-group">
+                        <label>Tamaño Alimentación</label>
+                        <input type="text" id="etq-tamano" placeholder="Ej: 4\"">
+                    </div>
+                    <div class="form-group">
+                        <label>Peso del Equipo</label>
+                        <input type="text" id="etq-peso" placeholder="Ej: 1200 Kg">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Fabricación</label>
+                        <input type="date" id="etq-fecha-fab">
+                    </div>
+                    <div class="form-group">
+                        <label>Número de Serie</label>
+                        <input type="text" id="etq-serie" placeholder="Ej: SHT-D01-001">
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})">⬇ Descargar Etiqueta PNG</button>
+                    <div class="form-group" style="flex:1; margin:0;">
+                        <label>Email destino</label>
+                        <input type="email" id="etq-email" placeholder="correo@ejemplo.com" style="margin:0;">
+                    </div>
+                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">📧 Enviar Etiqueta</button>
+                </div>
             </div>
-            <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap">
-                <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id})">📱 Enviar por WhatsApp</button>
-                <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id})">📧 Enviar por Email</button>
-                <select onchange="cambiarEstadoReq(${r.id}, this.value)" style="padding:0.3rem 0.6rem;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border-light);font-size:0.8rem">
+        `;
+
+        // General Actions
+        const generalActions = `
+            <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap; justify-content: flex-end; align-items:center;">
+                 <label>Estado General: </label>
+                 <select onchange="cambiarEstadoReq(${r.id}, this.value)" style="padding:0.3rem; border-radius:4px;">
                     <option value="Pendiente" ${r.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
                     <option value="Enviada" ${r.estado === 'Enviada' ? 'selected' : ''}>Enviada</option>
                     <option value="Recibida" ${r.estado === 'Recibida' ? 'selected' : ''}>Recibida</option>
@@ -1306,14 +1531,21 @@ async function verRequisicion(rid) {
                 </select>
             </div>
         `;
+
+        body.innerHTML = headerInfo + itemsHtml + sendActionsHtml + etiquetaHtml + generalActions;
+
     } catch (e) {
         body.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+        console.error(e);
     }
 }
 
-async function enviarReqWhatsApp(rid) {
+async function enviarReqWhatsApp(rid, provName) {
     try {
-        const res = await fetch(`${API}/api/requisiciones/${rid}/whatsapp-url`);
+        let url = `${API}/api/requisiciones/${rid}/whatsapp-url`;
+        if (provName) url += `?proveedor=${encodeURIComponent(provName)}`;
+
+        const res = await fetch(url);
         const data = await res.json();
         if (data.success) {
             window.open(data.url, '_blank');
@@ -1326,9 +1558,13 @@ async function enviarReqWhatsApp(rid) {
     }
 }
 
-async function enviarReqEmail(rid) {
+async function enviarReqEmail(rid, provName) {
+    if (!confirm(`¿Enviar correo con las partidas correspondientes a ${provName}?`)) return;
     try {
-        const res = await fetch(`${API}/api/requisiciones/${rid}/enviar-email`, { method: 'POST' });
+        let url = `${API}/api/requisiciones/${rid}/enviar-email`;
+        if (provName) url += `?proveedor=${encodeURIComponent(provName)}`;
+
+        const res = await fetch(url, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
             notify(data.message, 'success');
@@ -1369,6 +1605,89 @@ async function deleteRequisicion(rid) {
             loadRequisiciones();
         } else {
             notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ==================== ETIQUETA DESDE REQUISICION ====================
+function getEtiquetaData() {
+    return {
+        equipo: document.getElementById('etq-equipo')?.value || '',
+        modelo: document.getElementById('etq-modelo')?.value || '',
+        capacidad: document.getElementById('etq-capacidad')?.value || '',
+        potencia: document.getElementById('etq-potencia')?.value || '',
+        apertura: document.getElementById('etq-apertura')?.value || '',
+        tamano_alimentacion: document.getElementById('etq-tamano')?.value || '',
+        peso: document.getElementById('etq-peso')?.value || '',
+        fecha_fabricacion: document.getElementById('etq-fecha-fab')?.value || '',
+        numero_serie: document.getElementById('etq-serie')?.value || ''
+    };
+}
+
+async function descargarEtiquetaReq(rid) {
+    try {
+        const data = getEtiquetaData();
+        if (!data.equipo) {
+            notify('Ingresa al menos el nombre del equipo', 'error');
+            return;
+        }
+
+        const res = await fetch(`${API}/api/requisiciones/${rid}/etiqueta`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            notify(err.error || 'Error al generar etiqueta', 'error');
+            return;
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `etiqueta_${data.equipo.replace(/\s/g, '_')}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        notify('Etiqueta descargada', 'success');
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function enviarEtiquetaEmail(rid) {
+    const email = document.getElementById('etq-email')?.value || '';
+    if (!email) {
+        notify('Ingresa un correo destino', 'error');
+        return;
+    }
+    const data = getEtiquetaData();
+    data.email = email;
+
+    if (!data.equipo) {
+        notify('Ingresa al menos el nombre del equipo', 'error');
+        return;
+    }
+
+    if (!confirm(`¿Enviar etiqueta de "${data.equipo}" a ${email}?`)) return;
+
+    try {
+        const res = await fetch(`${API}/api/requisiciones/${rid}/enviar-etiqueta`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            notify(result.message, 'success');
+        } else {
+            notify(result.error || 'Error al enviar etiqueta', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');

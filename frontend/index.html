@@ -641,7 +641,7 @@
         <!-- ============ REQUISICIONES ============ -->
         <section id="requisiciones" class="section">
             <h2>Requisiciones</h2>
-            <p class="section-desc">Crea y envía hojas de requisicion a proveedores.</p>
+            <p class="section-desc">Crea y envía hojas de requisicion de materiales a proveedores.</p>
 
             <div class="card">
                 <div class="card-header">
@@ -654,8 +654,8 @@
                         <thead>
                             <tr>
                                 <th>Folio</th>
-                                <th>Equipo</th>
-                                <th>Proveedor</th>
+                                <th>No. Control</th>
+                                <th>Proyecto / Equipo</th>
                                 <th>Estado</th>
                                 <th>Fecha</th>
                                 <th>Acciones</th>
@@ -673,47 +673,94 @@
 
         <!-- MODAL: Nueva Requisicion -->
         <div class="modal" id="modal-requisicion">
-            <div class="modal-content modal-lg">
+            <div class="modal-content modal-lg" style="max-width: 95%;">
                 <div class="modal-header">
-                    <h3>Nueva Requisicion</h3>
+                    <h3>Nueva Requisicion - Hoja de Control</h3>
                     <button class="modal-close" onclick="closeModal('modal-requisicion')">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <form id="form-requisicion" class="form-grid">
-                        <div class="form-group">
-                            <label>Equipo / Descripcion</label>
-                            <input type="text" id="req-equipo" placeholder="Ej: Quebradora de quijada 10x16" required>
+                    <form id="form-requisicion">
+                        <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
+                            <div class="form-group" style="flex:2">
+                                <label>PROYECTO / ORDEN DE PRODUCCIÓN *</label>
+                                <input type="text" id="req-equipo" placeholder="Ej: SHT-D01 (Mesa de Concentracion)"
+                                    required>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>No. CONTROL</label>
+                                <input type="text" id="req-no-control" placeholder="Ej: RM01-00">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Proveedor</label>
-                            <select id="req-proveedor">
-                                <option value="">-- Sin proveedor --</option>
-                            </select>
+                        <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
+                            <div class="form-group" style="flex:1">
+                                <label>ÁREA</label>
+                                <input type="text" id="req-area" value="Departamento de Ingeniería"
+                                    placeholder="Área solicitante">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>PROVEEDOR PRINCIPAL (Opcional)</label>
+                                <select id="req-proveedor">
+                                    <option value="">-- Varios / Sin definir --</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
+                            <div class="form-group" style="flex:1">
+                                <label>EMITIDO POR</label>
+                                <input type="text" id="req-emitido" placeholder="Nombre de quien solicita">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>APROBADO POR</label>
+                                <input type="text" id="req-aprobado" placeholder="Nombre de quien autoriza">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>REVISADO POR</label>
+                                <input type="text" id="req-revisado" placeholder="Nombre de quien revisa">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>REQUERIDO POR</label>
+                                <input type="text" id="req-requerido" placeholder="Nombre de quien requiere">
+                            </div>
                         </div>
                         <div class="form-group full-width">
-                            <label>Notas</label>
+                            <label>NOTAS / OBSERVACIONES</label>
                             <textarea id="req-notas" rows="2" placeholder="Instrucciones adicionales..."></textarea>
                         </div>
+
                         <div class="form-group full-width">
-                            <label>Componentes</label>
-                            <div id="req-items-container">
-                                <div class="cot-item-row">
-                                    <input type="text" placeholder="Componente" style="flex:2" class="req-comp">
-                                    <input type="number" placeholder="Cant." style="width:70px" class="req-cant"
-                                        value="1" min="1">
-                                    <input type="text" placeholder="Unidad" style="width:80px" class="req-unidad"
-                                        value="pza">
-                                    <input type="number" placeholder="$ Est." style="width:100px" class="req-precio"
-                                        step="0.01" value="0">
-                                    <button type="button" class="btn btn-danger btn-sm"
-                                        onclick="this.parentElement.remove()">&#10006;</button>
+                            <label>Partidas / Componentes</label>
+                            <div class="items-editor">
+                                <div class="items-header"
+                                    style="display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; font-size:0.75rem; margin-bottom:5px; font-weight:bold; background:rgba(255,255,255,0.05); padding:5px; border-radius:4px;">
+                                    <span>No.</span>
+                                    <span>Descripcion / Parte</span>
+                                    <span>Proveedor</span>
+                                    <span>Comentarios</span>
+                                    <span>Cant</span>
+                                    <span>Unidad</span>
+                                    <span>Precio U.</span>
+                                    <span>IVA</span>
+                                    <span>Subtotal</span>
+                                    <span>Total</span>
+                                    <span></span>
+                                </div>
+                                <div id="req-items-container" class="items-list-container">
+                                    <!-- Items dinámicos aquí -->
+                                </div>
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                                    <button type="button" class="btn btn-secondary" onclick="addReqItem()">+ Agregar
+                                        Partida</button>
+                                    <div style="font-size:0.9rem; font-weight:bold;">
+                                        TOTAL GENERAL: <span id="req-total-general"
+                                            style="color:var(--accent);font-size:1.1rem;">$0.00</span>
+                                    </div>
                                 </div>
                             </div>
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="addReqItem()"
-                                style="margin-top:0.5rem;">+ Agregar Componente</button>
                         </div>
-                        <div class="form-actions full-width">
-                            <button type="submit" class="btn btn-primary">Crear Requisicion</button>
+
+                        <div class="form-actions full-width" style="margin-top:1rem;">
+                            <button type="submit" class="btn btn-primary">Guardar Requisicion</button>
                             <button type="button" class="btn btn-secondary"
                                 onclick="closeModal('modal-requisicion')">Cancelar</button>
                         </div>
@@ -724,7 +771,7 @@
 
         <!-- MODAL: Detalle Requisicion -->
         <div class="modal" id="modal-req-detalle">
-            <div class="modal-content modal-lg">
+            <div class="modal-content modal-xl" style="max-width:95%;">
                 <div class="modal-header">
                     <h3 id="req-detalle-titulo">Requisicion</h3>
                     <button class="modal-close" onclick="closeModal('modal-req-detalle')">&times;</button>
