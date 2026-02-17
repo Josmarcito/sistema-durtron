@@ -39,11 +39,18 @@ def run_migrations():
             "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS anticipo_monto DECIMAL(12,2) DEFAULT 0",
             "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS anticipo_fecha DATE",
         ]
-        for sql in migrations:
+        # Helper to execute safely
+        def safe_execute(sql, desc):
             try:
                 cur.execute(sql)
-            except Exception:
-                pass
+                conn.commit() # Commit after each success to save progress
+            except Exception as e:
+                conn.rollback() # Rollback ONLY this failure to reset transaction state
+                print(f"Warning ({desc}): {e}")
+
+        for sql in migrations:
+            safe_execute(sql, "ventas migration")
+
         # Phase B: tablas nuevas
         phase_b_tables = [
             """CREATE TABLE IF NOT EXISTS proveedores (
@@ -94,29 +101,11 @@ def run_migrations():
             )""",
         ]
         for sql in phase_b_tables:
-            try:
-                cur.execute(sql)
-            except Exception:
-                pass
+            safe_execute(sql, "phase_b table")
         
         # Migraciones adicionales para campos nuevos en Requisiciones (Refinamiento Usuario)
-        refinements = [
-            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS emitido_por VARCHAR(100)",
-            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS aprobado_por VARCHAR(100)",
-            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS no_control VARCHAR(30)",
-            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS area VARCHAR(100) DEFAULT 'Departamento de Ingeniería'",
-            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS revisado_por VARCHAR(100)",
-            "ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS requerido_por VARCHAR(100)",
-            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS proveedor_nombre VARCHAR(100)",
-            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS comentario TEXT",
-            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS precio_unitario DECIMAL(12,2) DEFAULT 0",
-            "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS tiene_iva BOOLEAN DEFAULT FALSE",
-        ]
-        for sql in refinements:
-            try:
-                cur.execute(sql)
-            except Exception:
-                pass
+        # These are now handled by safe_execute individually or as part of req_items_cols
+        # The original 'refinements' list is removed as per the instruction.
 
         # Tabla equipo_partes para partes técnicas por máquina
         partes_table = [
@@ -133,22 +122,21 @@ def run_migrations():
             "ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)",
         ]
         for sql in partes_table:
-            try:
-                cur.execute(sql)
-            except Exception as e:
-                print(f"Warning: Migracion step skipped: {e}")
+            safe_execute(sql, "equipo_partes table")
 
-        # Tabla equipo_partes migration
-        try:
-             cur.execute("ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)")
-             # Requisicion Items Migrations (Robust)
-             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS proveedor_nombre VARCHAR(100)")
-             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS comentario TEXT")
-             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS unidad VARCHAR(50) DEFAULT 'pza'")
-             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS precio_unitario DECIMAL(12,2) DEFAULT 0")
-             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS tiene_iva BOOLEAN DEFAULT FALSE")
-        except Exception as e:
-             print(f"Warning: Equipo Partes/Items migration error: {e}")
+        # Explicit migrations
+        safe_execute("ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)", "equipo_partes.proveedor_id")
+        
+        # Requests items migrations
+        req_items_cols = [
+             "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS proveedor_nombre VARCHAR(100)",
+             "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS comentario TEXT",
+             "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS unidad VARCHAR(50) DEFAULT 'pza'",
+             "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS precio_unitario DECIMAL(12,2) DEFAULT 0",
+             "ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS tiene_iva BOOLEAN DEFAULT FALSE"
+        ]
+        for sql in req_items_cols:
+             safe_execute(sql, "req_items col")
 
         conn.commit()
         cur.close()
