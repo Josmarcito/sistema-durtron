@@ -30,14 +30,35 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== NAVEGACION =====
+const sectionTitles = {
+    dashboard: 'Dashboard',
+    catalogo: 'Catalogo de Equipos',
+    inventario: 'Inventario',
+    ventas: 'Registro de Ventas',
+    vendedores: 'Vendedores',
+    cotizaciones: 'Cotizaciones'
+};
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+}
+
 function setupNav() {
-    document.querySelectorAll('.nav-btn').forEach(btn => {
+    document.querySelectorAll('.nav-btn[data-section]').forEach(btn => {
         btn.addEventListener('click', () => {
             const s = btn.dataset.section;
+            if (!s) return;
             document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
             document.getElementById(s).classList.add('active');
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            // Update topbar title
+            const titleEl = document.getElementById('topbar-section-title');
+            if (titleEl) titleEl.textContent = sectionTitles[s] || s;
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+            }
             if (s === 'vendedores') loadVendedores();
             if (s === 'ventas') loadVentas();
             if (s === 'dashboard') loadDashboard();

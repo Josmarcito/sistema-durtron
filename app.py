@@ -29,6 +29,30 @@ def get_db():
     url = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     return psycopg2.connect(url, cursor_factory=RealDictCursor)
 
+# Auto-migrar columnas nuevas al iniciar
+def run_migrations():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        migrations = [
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS tiene_anticipo BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS anticipo_monto DECIMAL(12,2) DEFAULT 0",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS anticipo_fecha DATE",
+        ]
+        for sql in migrations:
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("Migraciones ejecutadas OK")
+    except Exception as e:
+        print(f"Error en migraciones: {e}")
+
+run_migrations()
+
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
