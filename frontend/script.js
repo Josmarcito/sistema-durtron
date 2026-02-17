@@ -333,11 +333,29 @@ async function editarEquipo(eid) {
             catSel.innerHTML += `<option value="${c}" ${c === eq.categoria ? 'selected' : ''}>${c}</option>`;
         });
 
+        // Populate provider dropdown for parts
+        await populateParteProveedorSelect();
+
         // Load partes
         await cargarPartesEquipo(eid);
         openModal('modal-editar-equipo');
     } catch (e) {
         notify('Error cargando equipo: ' + e.message, 'error');
+    }
+}
+
+async function populateParteProveedorSelect() {
+    const sel = document.getElementById('nueva-parte-proveedor');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- Sin asignar --</option>';
+    try {
+        const res = await fetch(`${API}/api/proveedores`);
+        const provs = await res.json();
+        (Array.isArray(provs) ? provs : []).forEach(p => {
+            sel.innerHTML += `<option value="${p.id}">${p.razon_social}</option>`;
+        });
+    } catch (e) {
+        console.error('Error cargando proveedores para partes:', e);
     }
 }
 
@@ -364,6 +382,7 @@ function renderPartesLista(partes) {
                 <th style="text-align:left;">Descripcion</th>
                 <th>Cant</th>
                 <th>Unidad</th>
+                <th style="text-align:left;">Proveedor</th>
                 <th>Accion</th>
             </tr></thead>
             <tbody>
@@ -372,6 +391,7 @@ function renderPartesLista(partes) {
                     <td>${p.descripcion || '-'}</td>
                     <td style="text-align:center;">${p.cantidad}</td>
                     <td style="text-align:center;">${p.unidad}</td>
+                    <td>${p.proveedor_nombre || '<span style="color:#888;">Sin asignar</span>'}</td>
                     <td style="text-align:center;"><button class="btn btn-sm btn-danger" onclick="eliminarParteEquipo(${p.id})">X</button></td>
                 </tr>`).join('')}
             </tbody>
@@ -382,11 +402,13 @@ function renderPartesLista(partes) {
 async function agregarParteEquipo() {
     const nombre = document.getElementById('nueva-parte-nombre').value.trim();
     if (!nombre) { notify('Ingresa el nombre de la parte', 'error'); return; }
+    const provSel = document.getElementById('nueva-parte-proveedor');
     const data = {
         nombre_parte: nombre,
         descripcion: document.getElementById('nueva-parte-desc').value.trim(),
         cantidad: parseInt(document.getElementById('nueva-parte-cant').value) || 1,
-        unidad: document.getElementById('nueva-parte-unidad').value.trim() || 'pza'
+        unidad: document.getElementById('nueva-parte-unidad').value.trim() || 'pza',
+        proveedor_id: provSel ? (provSel.value || null) : null
     };
     try {
         const res = await fetch(`${API}/api/equipos/${editingEquipoId}/partes`, {
@@ -401,6 +423,7 @@ async function agregarParteEquipo() {
             document.getElementById('nueva-parte-desc').value = '';
             document.getElementById('nueva-parte-cant').value = '1';
             document.getElementById('nueva-parte-unidad').value = 'pza';
+            if (provSel) provSel.value = '';
             await cargarPartesEquipo(editingEquipoId);
         } else {
             notify(result.error || 'Error', 'error');
@@ -1551,10 +1574,22 @@ async function cargarPartesRequisicion(equipoId) {
                 const cantInput = lastRow.querySelector('.req-cant');
                 const unidadInput = lastRow.querySelector('.req-unidad');
                 const comentInput = lastRow.querySelector('.req-coment');
+                const provSelect = lastRow.querySelector('.req-prov');
                 if (compInput) compInput.value = parte.nombre_parte;
                 if (cantInput) cantInput.value = parte.cantidad || 1;
                 if (unidadInput) unidadInput.value = parte.unidad || 'pza';
                 if (comentInput && parte.descripcion) comentInput.value = parte.descripcion;
+                // Auto-fill provider if available
+                if (provSelect && parte.proveedor_id) {
+                    const opts = Array.from(provSelect.options);
+                    const match = opts.find(o => o.value == parte.proveedor_id);
+                    if (match) provSelect.value = parte.proveedor_id;
+                    else if (parte.proveedor_nombre) {
+                        // If ID not found, try matching by name
+                        const matchName = opts.find(o => o.text === parte.proveedor_nombre);
+                        if (matchName) provSelect.value = matchName.value;
+                    }
+                }
             }
         });
         updateReqGrandTotal();
@@ -1661,12 +1696,13 @@ async function verRequisicion(rid) {
         Object.keys(itemsByProv).forEach(pName => {
             if (pName === 'Sin Asignar') return;
             const provTotal = itemsByProv[pName].reduce((s, i) => s + i.rowTotal, 0);
+            const eqName = (r.equipo_nombre || '').replace(/'/g, "\\'");
             sendActionsHtml += `
                 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px; margin-bottom:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
                     <span><strong>${pName}</strong> (${itemsByProv[pName].length} partidas - $${provTotal.toFixed(2)})</span>
                     <div style="gap:5px; display:flex;">
-                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName}')">WhatsApp</button>
-                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName}')">Email</button>
+                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName.replace(/'/g, "\\'")}', '${eqName}')">WhatsApp + PDF</button>
+                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName.replace(/'/g, "\\'")}')">Email</button>
                     </div>
                 </div>
             `;
@@ -1752,19 +1788,65 @@ async function verRequisicion(rid) {
     }
 }
 
-async function enviarReqWhatsApp(rid, provName) {
+async function enviarReqWhatsApp(rid, provName, equipoNombre) {
     try {
-        let url = `${API}/api/requisiciones/${rid}/whatsapp-url`;
-        if (provName) url += `?proveedor=${encodeURIComponent(provName)}`;
+        // 1. Find equipo_id from catalog
+        const equipo = equiposCatalogo.find(e =>
+            e.nombre === equipoNombre ||
+            `${e.codigo} - ${e.nombre}` === equipoNombre ||
+            e.codigo === equipoNombre
+        );
 
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.success) {
-            window.open(data.url, '_blank');
-            notify('Abriendo WhatsApp...', 'success');
-        } else {
-            notify(data.error || 'Error', 'error');
+        // 2. Find proveedor from the API  
+        const provRes = await fetch(`${API}/api/proveedores`);
+        const proveedores = await provRes.json();
+        const prov = (Array.isArray(proveedores) ? proveedores : []).find(p => p.razon_social === provName);
+
+        if (!prov) {
+            notify(`No se encontro el proveedor "${provName}" en la base de datos`, 'error');
+            return;
         }
+
+        // 3. Download the PDF/order image if equipo found
+        if (equipo) {
+            try {
+                const pdfUrl = `${API}/api/equipos/${equipo.id}/orden-proveedor/${prov.id}`;
+                const pdfRes = await fetch(pdfUrl);
+                if (pdfRes.ok) {
+                    const blob = await pdfRes.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `orden_${equipo.codigo}_${provName.replace(/ /g, '_')}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    notify('Documento de orden descargado. Adjuntalo en WhatsApp.', 'success');
+                }
+            } catch (pdfErr) {
+                console.warn('No se pudo descargar PDF:', pdfErr);
+            }
+        }
+
+        // 4. Open WhatsApp with pre-filled message template
+        const whatsapp = prov.whatsapp || prov.telefono || '';
+        if (!whatsapp) {
+            notify(`El proveedor "${provName}" no tiene WhatsApp registrado`, 'error');
+            return;
+        }
+        const contacto = prov.contacto_nombre || provName;
+        const proyecto = equipoNombre || 'proyecto en curso';
+        const mensaje = `Hola ${contacto}, somos *DURTRON - Innovacion Industrial*.\n\nSolicitamos cotizacion de materiales para el proyecto: *${proyecto}*.\n\nSe adjunta documento con el detalle de las partes requeridas.\n\nQuedamos atentos a su respuesta con precios y tiempos de entrega.\n\nGracias.`;
+
+        const tel = whatsapp.replace(/[^0-9]/g, '');
+        const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
+
+        // Small delay so download completes first
+        setTimeout(() => {
+            window.open(waUrl, '_blank');
+        }, 800);
+
     } catch (e) {
         notify('Error: ' + e.message, 'error');
     }

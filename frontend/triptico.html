@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DURTRON - Brochure Industrial</title>
+    <link rel="stylesheet" href="triptico.css">
+</head>
+
+<body>
+
+    <!-- PAGINA 1: EXTERIOR (Doblado) -->
+    <!-- Caras: [Interior/Info] [Contraportada] [Portada] -->
+    <div class="page page-exterior">
+
+        <!-- Panel 1: Izquierdo (Se dobla hacia adentro) -->
+        <div class="panel panel-compromiso">
+            <h2>Compromiso Durtron</h2>
+            <div class="accent-line"></div>
+            <h3>Calidad que Trasciende</h3>
+            <p>En DURTRON no solo fabricamos maquinaria; construimos los cimientos de la industria moderna. Cada equipo
+                es sometido a rigurosas pruebas de esfuerzo para garantizar una operatividad del 99.9%.</p>
+            <div class="img-box" style="background-image: url('environment_factory_view.png');"></div>
+            <p>Nuestra tecnología de vanguardia permite reducir los costos de mantenimiento hasta en un 30%, optimizando
+                el retorno de inversión de nuestros clientes desde el primer día.</p>
+        </div>
+
+        <!-- Panel 2: Centro (Contraportada) -->
+        <div class="panel panel-contacto">
+            <img src="logo.png" alt="Durtron Logo" style="width: 120px; margin-bottom: 10mm;">
+            <h2>Contacto</h2>
+            <div class="accent-line"></div>
+            <div class="contacto-info">
+                <p>Ubicación Central:</p>
+                <p>Av. del Sol #329, Durango, Dgo.</p>
+                <br>
+                <p>Teléfono:</p>
+                <p>(+52) 618 134 1056</p>
+                <br>
+                <p>Ventas Directas:</p>
+                <p>ventas@durtron.com</p>
+            </div>
+            <div style="margin-top: 15mm;">
+                <p style="font-size: 8pt; opacity: 0.7;">Escanee para ver catálogo digital</p>
+                <!-- Placeholder para QR -->
+                <div
+                    style="width: 30mm; height: 30mm; border: 2px solid #ddd; margin: 2mm auto; background: white; padding: 2mm;">
+                    <div
+                        style="width: 100%; height: 100%; background: #000; opacity: 0.1; display:flex; align-items:center; justify-content:center; font-size:6pt;">
+                        QR CODE</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 3: Derecho (PORTADA) -->
+        <div class="panel panel-portada">
+            <div>
+                <img src="logo.png" alt="Durtron Logo" class="portada-logo">
+                <div class="portada-hero" style="background-image: url('product_brochure_hero.png');"></div>
+                <h1 class="portada-title">Innovación<br>Industrial</h1>
+                <p class="portada-slogan">Equipos de Trituración de Alto Desempeño</p>
+            </div>
+            <footer>DURTRON © 2024 - Durango, México</footer>
+        </div>
+
+    </div>
+
+    <!-- PAGINA 2: INTERIOR (Abierto) -->
+    <!-- Caras: [Nosotros] [Equipos] [Servicios] -->
+    <div class="page page-interior">
+
+        <!-- Panel 4: Izquierdo (Nosotros) -->
+        <div class="panel">
+            <h2>Quiénes Somos</h2>
+            <div class="accent-line"></div>
+            <p>Fundada en Durango, DURTRON nace de la necesidad de proveer a la industria minera y de construcción con
+                equipos que realmente soporten las condiciones más extremas de trabajo.</p>
+            <div class="img-box" style="background-image: url('technical_equipment_detail.png');"></div>
+            <h3>Nuestra Visión</h3>
+            <p>Ser el referente líder en soluciones de trituración y procesamiento de materiales en toda la República
+                Mexicana, impulsando el crecimiento industrial con tecnología propia.</p>
+        </div>
+
+        <!-- Panel 5: Centro (Equipos Destacados) -->
+        <div class="panel" style="background: #fff; box-shadow: inset 0 0 10px rgba(0,0,0,0.02);">
+            <h2>Equipos Líderes</h2>
+            <div class="accent-line"></div>
+
+            <div style="margin-bottom: 5mm;">
+                <h3 style="color:var(--durtron-blue)">Quebradora JC150</h3>
+                <p style="margin-bottom:2mm">Ideal para granito y materiales de alta dureza.</p>
+                <ul class="feature-list">
+                    <li>Capacidad: 5-20 TPH</li>
+                    <li>Potencia: 15 HP (11 kW)</li>
+                    <li>Apertura: 150x250 mm</li>
+                </ul>
+                <span class="price-tag">Consulte Precio Lista</span>
+            </div>
+
+            <div style="border-top: 1px solid #eee; padding-top: 5mm;">
+                <h3 style="color:var(--durtron-blue)">Trituradora Portátil</h3>
+                <p style="margin-bottom:2mm">Movilidad total para obras en campo remoto.</p>
+                <ul class="feature-list">
+                    <li>Montaje sobre chasis</li>
+                    <li>Operación diésel/eléctrica</li>
+                    <li>Fácil mantenimiento</li>
+                </ul>
+                <span class="price-tag">Bajo Pedido</span>
+            </div>
+        </div>
+
+        <!-- Panel 6: Derecho (Servicios) -->
+        <div class="panel" style="background: linear-gradient(180deg, #fff 0%, #f0f0f0 100%);">
+            <h2>Servicios 360°</h2>
+            <div class="accent-line"></div>
+
+            <h3 style="margin-top:2mm;">Soporte Técnico</h3>
+            <p>Contamos con ingenieros especializados disponibles para mantenimiento preventivo y correctivo en sitio.
+            </p>
+
+            <h3 style="margin-top:2mm;">Refacciones Originales</h3>
+            <p>Amplio stock de piezas de desgaste y componentes críticos para evitar paros de producción.</p>
+
+            <h3 style="margin-top:2mm;">Asesoría Minera</h3>
+            <p>Diseñamos plantas completas de trituración a medida de sus necesidades de producción tph.</p>
+
+            <div style="flex-grow:1; display:flex; align-items:flex-end;">
+                <div
+                    style="padding: 4mm; background: var(--durtron-red); color: white; border-radius: 8px; font-size: 9pt; text-align:center; width: 100%;">
+                    "DURTRON: El poder de la fragmentación perfecta"
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+
+</html>

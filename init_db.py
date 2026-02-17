@@ -235,9 +235,15 @@ def init_db():
             descripcion TEXT,
             cantidad INTEGER DEFAULT 1,
             unidad VARCHAR(50) DEFAULT 'pza',
+            proveedor_id INTEGER REFERENCES proveedores(id),
             fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # Migration for existing tables
+    try:
+        cursor.execute("ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)")
+    except Exception:
+        pass
     print("  OK tabla 'equipo_partes'")
 
     conn.commit()

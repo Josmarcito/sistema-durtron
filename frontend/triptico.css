@@ -1,0 +1,240 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+:root {
+    --durtron-red: #D2152B;
+    --durtron-red-dark: #A0101F;
+    --durtron-orange: #F47427;
+    --durtron-red-light: #EF4736;
+    --durtron-blue: #007DC3;
+    --text: #1a1a1a;
+    --text-light: #4a4a4a;
+    --white: #ffffff;
+    --grey-bg: #f8f9fa;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    background: #ccc;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* Page Setup */
+@page {
+    size: letter landscape;
+    margin: 0;
+}
+
+.page {
+    width: 279.4mm;
+    /* Letter width in landscape */
+    height: 215.9mm;
+    /* Letter height in landscape */
+    background: var(--white);
+    margin: 10mm auto;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+}
+
+@media print {
+    body {
+        background: none;
+    }
+
+    .page {
+        margin: 0;
+        box-shadow: none;
+        page-break-after: always;
+    }
+}
+
+/* Folding Guides (Optional/Subtle) */
+.page::before,
+.page::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(0, 0, 0, 0.05);
+    z-index: 10;
+}
+
+.page::before {
+    left: 33.333%;
+}
+
+.page::after {
+    left: 66.666%;
+}
+
+/* Layout Panels */
+.panel {
+    width: 33.333%;
+    height: 100%;
+    padding: 15mm 10mm;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Typography */
+h1 {
+    font-size: 28pt;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 5mm;
+    text-transform: uppercase;
+}
+
+h2 {
+    font-size: 18pt;
+    font-weight: 700;
+    margin-bottom: 4mm;
+    color: var(--durtron-red);
+}
+
+h3 {
+    font-size: 14pt;
+    font-weight: 700;
+    margin-bottom: 3mm;
+}
+
+p {
+    font-size: 10pt;
+    line-height: 1.4;
+    color: var(--text-light);
+    margin-bottom: 4mm;
+}
+
+/* Styles for specific elements */
+.accent-line {
+    width: 40px;
+    height: 4px;
+    background: var(--durtron-orange);
+    margin-bottom: 6mm;
+}
+
+.img-box {
+    width: 100%;
+    height: 60mm;
+    background-size: cover;
+    background-position: center;
+    border-radius: 4px;
+    margin-bottom: 6mm;
+    border: 1px solid #eee;
+}
+
+/* PORTADA */
+.panel-portada {
+    background: linear-gradient(135deg, var(--durtron-red-dark) 0%, var(--durtron-red) 100%);
+    color: white;
+    justify-content: space-between;
+    text-align: center;
+}
+
+.portada-logo {
+    width: 70%;
+    margin: 0 auto 10mm;
+    filter: brightness(0) invert(1);
+}
+
+.portada-hero {
+    height: 90mm;
+    margin: 5mm -10mm;
+    background-size: cover;
+    background-position: center;
+    clip-path: polygon(0 10%, 100% 0, 100% 90%, 0% 100%);
+}
+
+.portada-title {
+    color: white;
+    margin-top: 5mm;
+}
+
+.portada-slogan {
+    font-size: 12pt;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    opacity: 0.9;
+}
+
+/* CONTRA PORTADA (Centro Exterior) */
+.panel-contacto {
+    background: var(--grey-bg);
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.contacto-info {
+    margin-top: 10mm;
+}
+
+.contacto-info p {
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* INTERIOR INFO (Panel izquierdo Exterior) */
+.panel-compromiso {
+    background: white;
+}
+
+/* INTERIOR COMPLETO */
+.interior-header {
+    background: var(--durtron-red);
+    color: white;
+    padding: 10mm;
+    text-align: center;
+    grid-column: 1 / span 3;
+}
+
+.feature-list {
+    list-style: none;
+    margin-bottom: 5mm;
+}
+
+.feature-list li {
+    font-size: 9pt;
+    margin-bottom: 2mm;
+    padding-left: 5mm;
+    position: relative;
+}
+
+.feature-list li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--durtron-orange);
+    font-weight: bold;
+}
+
+.price-tag {
+    display: inline-block;
+    padding: 2mm 4mm;
+    background: var(--durtron-blue);
+    color: white;
+    border-radius: 20px;
+    font-size: 10pt;
+    font-weight: 700;
+}
+
+footer {
+    position: absolute;
+    bottom: 5mm;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 8pt;
+    color: rgba(255, 255, 255, 0.6);
+}

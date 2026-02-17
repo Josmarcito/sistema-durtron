@@ -127,8 +127,10 @@ def run_migrations():
                 descripcion TEXT,
                 cantidad INTEGER DEFAULT 1,
                 unidad VARCHAR(50) DEFAULT 'pza',
+                proveedor_id INTEGER REFERENCES proveedores(id),
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
+            "ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)",
         ]
         for sql in partes_table:
             try:
@@ -469,7 +471,12 @@ def get_equipo_partes(eid):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('SELECT * FROM equipo_partes WHERE equipo_id=%s ORDER BY id ASC', (eid,))
+        cur.execute('''
+            SELECT ep.*, p.razon_social as proveedor_nombre, p.whatsapp as proveedor_whatsapp
+            FROM equipo_partes ep
+            LEFT JOIN proveedores p ON ep.proveedor_id = p.id
+            WHERE ep.equipo_id=%s ORDER BY ep.id ASC
+        ''', (eid,))
         data = cur.fetchall()
         cur.close()
         conn.close()
@@ -484,12 +491,15 @@ def add_equipo_parte(eid):
         nombre = (d.get('nombre_parte') or '').strip()
         if not nombre:
             return jsonify({'error': 'Nombre de parte es obligatorio'}), 400
+        prov_id = d.get('proveedor_id') or None
+        if prov_id:
+            prov_id = int(prov_id)
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
-            INSERT INTO equipo_partes (equipo_id, nombre_parte, descripcion, cantidad, unidad)
-            VALUES (%s,%s,%s,%s,%s) RETURNING id
-        ''', (eid, nombre, d.get('descripcion') or '', d.get('cantidad', 1), d.get('unidad') or 'pza'))
+            INSERT INTO equipo_partes (equipo_id, nombre_parte, descripcion, cantidad, unidad, proveedor_id)
+            VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
+        ''', (eid, nombre, d.get('descripcion') or '', d.get('cantidad', 1), d.get('unidad') or 'pza', prov_id))
         pid = cur.fetchone()['id']
         conn.commit()
         cur.close()
@@ -509,6 +519,119 @@ def delete_equipo_parte(pid):
         conn.close()
         return jsonify({'success': True, 'message': 'Parte eliminada'})
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PDF ORDEN DE COMPRA POR PROVEEDOR ====================
+@app.route('/api/equipos/<int:eid>/orden-proveedor/<int:prov_id>', methods=['GET'])
+def generar_orden_proveedor(eid, prov_id):
+    """Genera un PDF-imagen con las partes de un equipo filtradas por proveedor"""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        conn = get_db()
+        cur = conn.cursor()
+        # Get equipo info
+        cur.execute('SELECT * FROM equipos WHERE id=%s', (eid,))
+        equipo = cur.fetchone()
+        if not equipo:
+            return jsonify({'error': 'Equipo no encontrado'}), 404
+        # Get proveedor info
+        cur.execute('SELECT * FROM proveedores WHERE id=%s', (prov_id,))
+        prov = cur.fetchone()
+        if not prov:
+            return jsonify({'error': 'Proveedor no encontrado'}), 404
+        # Get parts for this equipo + proveedor
+        cur.execute('''
+            SELECT nombre_parte, descripcion, cantidad, unidad
+            FROM equipo_partes
+            WHERE equipo_id=%s AND proveedor_id=%s ORDER BY id ASC
+        ''', (eid, prov_id))
+        partes = cur.fetchall()
+        cur.close()
+        conn.close()
+        if not partes:
+            return jsonify({'error': 'No hay partes para este proveedor'}), 404
+
+        # Generate image (professional order document)
+        W, H_base = 800, 400
+        row_h = 30
+        H = H_base + len(partes) * row_h
+        img = Image.new('RGB', (W, H), '#FFFFFF')
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            font_head = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 13)
+            font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+        except:
+            font_title = ImageFont.load_default()
+            font_head = font_title
+            font_body = font_title
+            font_small = font_title
+
+        # Header bar
+        draw.rectangle([(0, 0), (W, 70)], fill='#1a1a2e')
+        draw.text((20, 15), "DURTRON", fill='#D2152B', font=font_title)
+        draw.text((20, 42), "Innovacion Industrial", fill='#8888a4', font=font_small)
+        draw.text((W - 250, 15), "SOLICITUD DE COTIZACION", fill='#FFFFFF', font=font_head)
+        from datetime import datetime
+        draw.text((W - 250, 38), f"Fecha: {datetime.now().strftime('%d/%m/%Y')}", fill='#cccccc', font=font_small)
+
+        y = 85
+        # Equipo info
+        draw.text((20, y), f"Proyecto / Equipo:", fill='#666666', font=font_small)
+        draw.text((150, y), f"{equipo.get('nombre', '')} ({equipo.get('codigo', '')})", fill='#000000', font=font_body)
+        y += 22
+        draw.text((20, y), f"Proveedor:", fill='#666666', font=font_small)
+        draw.text((150, y), f"{prov.get('razon_social', '')}", fill='#000000', font=font_body)
+        y += 22
+        if prov.get('contacto_nombre'):
+            draw.text((20, y), f"Contacto:", fill='#666666', font=font_small)
+            draw.text((150, y), f"{prov.get('contacto_nombre', '')}", fill='#000000', font=font_body)
+            y += 22
+
+        y += 10
+        # Separator
+        draw.line([(20, y), (W - 20, y)], fill='#D2152B', width=2)
+        y += 15
+
+        # Table header
+        draw.rectangle([(20, y), (W - 20, y + 28)], fill='#f0f0f0')
+        draw.text((30,  y + 7), "#", fill='#333333', font=font_head)
+        draw.text((60,  y + 7), "PARTE / COMPONENTE", fill='#333333', font=font_head)
+        draw.text((400, y + 7), "DESCRIPCION", fill='#333333', font=font_head)
+        draw.text((620, y + 7), "CANT.", fill='#333333', font=font_head)
+        draw.text((700, y + 7), "UNIDAD", fill='#333333', font=font_head)
+        y += 30
+
+        # Table rows
+        for i, p in enumerate(partes):
+            bg = '#FFFFFF' if i % 2 == 0 else '#f8f8f8'
+            draw.rectangle([(20, y), (W - 20, y + row_h)], fill=bg)
+            draw.text((30,  y + 8), str(i + 1), fill='#333333', font=font_body)
+            draw.text((60,  y + 8), str(p.get('nombre_parte', ''))[:40], fill='#000000', font=font_body)
+            draw.text((400, y + 8), str(p.get('descripcion', ''))[:25], fill='#666666', font=font_body)
+            draw.text((620, y + 8), str(p.get('cantidad', 1)), fill='#000000', font=font_body)
+            draw.text((700, y + 8), str(p.get('unidad', 'pza')), fill='#000000', font=font_body)
+            y += row_h
+        
+        # Bottom border
+        draw.line([(20, y), (W - 20, y)], fill='#cccccc', width=1)
+        y += 20
+
+        # Footer
+        draw.text((20, y), "DURTRON - Innovacion Industrial | Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056", fill='#999999', font=font_small)
+        y += 15
+        draw.text((20, y), "Este documento es una solicitud de cotizacion. Favor de responder con precios y tiempos de entrega.", fill='#999999', font=font_small)
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        filename = f"orden_{equipo.get('codigo', 'equipo')}_{prov.get('razon_social', 'prov').replace(' ', '_')}.png"
+        return send_file(buf, mimetype='image/png', as_attachment=True, download_name=filename)
+    except Exception as e:
+        print(f'Error generando orden proveedor: {e}')
         return jsonify({'error': str(e)}), 500
 
 # ==================== INVENTARIO ====================
