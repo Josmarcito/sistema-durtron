@@ -141,7 +141,12 @@ def run_migrations():
         # Tabla equipo_partes migration
         try:
              cur.execute("ALTER TABLE equipo_partes ADD COLUMN IF NOT EXISTS proveedor_id INTEGER REFERENCES proveedores(id)")
+             # Requisicion Items Migrations (Robust)
              cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS proveedor_nombre VARCHAR(100)")
+             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS comentario TEXT")
+             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS unidad VARCHAR(50) DEFAULT 'pza'")
+             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS precio_unitario DECIMAL(12,2) DEFAULT 0")
+             cur.execute("ALTER TABLE requisicion_items ADD COLUMN IF NOT EXISTS tiene_iva BOOLEAN DEFAULT FALSE")
         except Exception as e:
              print(f"Warning: Equipo Partes/Items migration error: {e}")
 
