@@ -847,13 +847,13 @@
                             <label>Partidas / Componentes</label>
                             <div class="items-editor">
                                 <div class="items-header"
-                                    style="display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; font-size:0.75rem; margin-bottom:5px; font-weight:bold; background:rgba(255,255,255,0.05); padding:5px; border-radius:4px;">
+                                    style="display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; font-size:0.75rem; margin-bottom:5px; font-weight:bold; background:rgba(255,255,255,0.05); padding:5px; border-radius:4px;">
                                     <span>No.</span>
                                     <span>Descripcion / Parte</span>
                                     <span>Proveedor</span>
                                     <span>Comentarios</span>
                                     <span>Cant</span>
-                                    <span>Unidad</span>
+                                    <!-- Unidad removed -->
                                     <span>Precio U.</span>
                                     <span>IVA</span>
                                     <span>Subtotal</span>
@@ -866,7 +866,7 @@
                                 <div
                                     style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
                                     <button type="button" class="btn btn-secondary" onclick="addReqItem()">+ Agregar
-                                        Partida</button>
+                                        Parte</button>
                                     <div style="font-size:0.9rem; font-weight:bold;">
                                         TOTAL GENERAL: <span id="req-total-general"
                                             style="color:var(--accent);font-size:1.1rem;">$0.00</span>
@@ -906,7 +906,13 @@
 
     </div><!-- /main-content -->
 
-    <script src="script.js"></script>
+    <div id="toast-container"></div>
+    <script src="/static/script.js?v=TIMESTAMP_HERE"></script>
+    <script>
+        // Force refresh if version mismatch? 
+        // Simple cache bust with timestamp
+        document.querySelector('script[src^="/static/script.js"]').src = '/static/script.js?v=' + Date.now();
+    </script>
 </body>
 
 </html>

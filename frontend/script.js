@@ -1421,7 +1421,7 @@ function addReqItem() {
     const container = document.getElementById('req-items-container');
     const row = document.createElement('div');
     row.className = 'req-item-row';
-    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 1fr 1fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
+    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
 
     row.innerHTML = `
         <span style="text-align:center;font-weight:bold;color:#aaa;">${reqItemCounter}</span>
