@@ -225,12 +225,27 @@ def init_db():
     ''')
     print("  OK tabla 'requisicion_items'")
 
+    # Tabla equipo_partes (partes tecnicas por maquina)
+    print("Creando tabla 'equipo_partes'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS equipo_partes (
+            id SERIAL PRIMARY KEY,
+            equipo_id INTEGER NOT NULL REFERENCES equipos(id) ON DELETE CASCADE,
+            nombre_parte VARCHAR(200) NOT NULL,
+            descripcion TEXT,
+            cantidad INTEGER DEFAULT 1,
+            unidad VARCHAR(50) DEFAULT 'pza',
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'equipo_partes'")
+
     conn.commit()
     cursor.close()
     conn.close()
     print("=" * 60)
     print("Base de datos inicializada correctamente")
-    print("Tablas: equipos, inventario, ventas, cotizaciones, cotizacion_items, proveedores, plantillas_componentes, requisiciones, requisicion_items")
+    print("Tablas: equipos, inventario, ventas, cotizaciones, cotizacion_items, proveedores, plantillas_componentes, requisiciones, requisicion_items, equipo_partes")
     print("=" * 60)
 
 if __name__ == '__main__':

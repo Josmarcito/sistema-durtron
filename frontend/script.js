@@ -66,7 +66,7 @@ function setupNav() {
             if (s === 'dashboard') loadDashboard();
             if (s === 'cotizaciones') { loadCotizaciones(); populateCotEquipoSelects(); }
             if (s === 'proveedores') loadProveedores();
-            if (s === 'requisiciones') { loadRequisiciones(); populateReqProveedorSelect(); }
+            if (s === 'requisiciones') { loadRequisiciones(); populateReqProveedorSelect(); populateReqEquipoSelect(); }
         });
     });
 }
@@ -242,6 +242,7 @@ async function loadCatalogo() {
         equiposCatalogo = Array.isArray(data) ? data : [];
         renderCatalogo();
         updateEquipoSelect();
+        populateReqEquipoSelect();
     } catch (e) {
         console.error('Error catalogo:', e);
         document.getElementById('catalogo-tbody').innerHTML =
@@ -265,6 +266,7 @@ function renderCatalogo() {
         <td class="text-right">${money(eq.precio_minimo)}</td>
         <td>
             <div class="action-buttons">
+                <button class="btn btn-sm btn-primary" onclick="editarEquipo(${eq.id})">Editar</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteCatalogo(${eq.id})">Eliminar</button>
             </div>
         </td>
@@ -292,6 +294,172 @@ async function deleteCatalogo(id) {
             loadCatalogo();
         } else {
             notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ===== EDITAR EQUIPO Y PARTES TECNICAS =====
+let editingEquipoId = null;
+
+async function editarEquipo(eid) {
+    editingEquipoId = eid;
+    try {
+        const res = await fetch(`${API}/api/equipos/${eid}`);
+        const eq = await res.json();
+        if (eq.error) { notify(eq.error, 'error'); return; }
+
+        document.getElementById('edit-eq-id').value = eq.id;
+        document.getElementById('edit-eq-codigo').value = eq.codigo || '';
+        document.getElementById('edit-eq-nombre').value = eq.nombre || '';
+        document.getElementById('edit-eq-marca').value = eq.marca || '';
+        document.getElementById('edit-eq-modelo').value = eq.modelo || '';
+        document.getElementById('edit-eq-precio-lista').value = eq.precio_lista || 0;
+        document.getElementById('edit-eq-precio-minimo').value = eq.precio_minimo || 0;
+        document.getElementById('edit-eq-precio-costo').value = eq.precio_costo || 0;
+        document.getElementById('edit-eq-potencia').value = eq.potencia_motor || '';
+        document.getElementById('edit-eq-capacidad').value = eq.capacidad || '';
+        document.getElementById('edit-eq-dimensiones').value = eq.dimensiones || '';
+        document.getElementById('edit-eq-peso').value = eq.peso || '';
+        document.getElementById('edit-eq-especificaciones').value = eq.especificaciones || '';
+        document.getElementById('edit-eq-descripcion').value = eq.descripcion || '';
+
+        // Set categoria
+        const catSel = document.getElementById('edit-eq-categoria');
+        catSel.innerHTML = '<option value="">Seleccionar...</option>';
+        const cats = [...new Set(equiposCatalogo.map(e => e.categoria).filter(Boolean))];
+        cats.forEach(c => {
+            catSel.innerHTML += `<option value="${c}" ${c === eq.categoria ? 'selected' : ''}>${c}</option>`;
+        });
+
+        // Load partes
+        await cargarPartesEquipo(eid);
+        openModal('modal-editar-equipo');
+    } catch (e) {
+        notify('Error cargando equipo: ' + e.message, 'error');
+    }
+}
+
+async function cargarPartesEquipo(eid) {
+    try {
+        const res = await fetch(`${API}/api/equipos/${eid}/partes`);
+        const partes = await res.json();
+        renderPartesLista(partes);
+    } catch (e) {
+        document.getElementById('edit-eq-partes-list').innerHTML = '<p style="color:#888;">Error cargando partes.</p>';
+    }
+}
+
+function renderPartesLista(partes) {
+    const container = document.getElementById('edit-eq-partes-list');
+    if (!partes || partes.length === 0) {
+        container.innerHTML = '<p style="color:#888; font-style:italic;">No hay partes registradas para este equipo.</p>';
+        return;
+    }
+    container.innerHTML = `
+        <table style="width:100%; font-size:0.9rem;">
+            <thead><tr>
+                <th style="text-align:left;">Parte</th>
+                <th style="text-align:left;">Descripcion</th>
+                <th>Cant</th>
+                <th>Unidad</th>
+                <th>Accion</th>
+            </tr></thead>
+            <tbody>
+                ${partes.map(p => `<tr>
+                    <td>${p.nombre_parte}</td>
+                    <td>${p.descripcion || '-'}</td>
+                    <td style="text-align:center;">${p.cantidad}</td>
+                    <td style="text-align:center;">${p.unidad}</td>
+                    <td style="text-align:center;"><button class="btn btn-sm btn-danger" onclick="eliminarParteEquipo(${p.id})">X</button></td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+async function agregarParteEquipo() {
+    const nombre = document.getElementById('nueva-parte-nombre').value.trim();
+    if (!nombre) { notify('Ingresa el nombre de la parte', 'error'); return; }
+    const data = {
+        nombre_parte: nombre,
+        descripcion: document.getElementById('nueva-parte-desc').value.trim(),
+        cantidad: parseInt(document.getElementById('nueva-parte-cant').value) || 1,
+        unidad: document.getElementById('nueva-parte-unidad').value.trim() || 'pza'
+    };
+    try {
+        const res = await fetch(`${API}/api/equipos/${editingEquipoId}/partes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            notify('Parte agregada', 'success');
+            document.getElementById('nueva-parte-nombre').value = '';
+            document.getElementById('nueva-parte-desc').value = '';
+            document.getElementById('nueva-parte-cant').value = '1';
+            document.getElementById('nueva-parte-unidad').value = 'pza';
+            await cargarPartesEquipo(editingEquipoId);
+        } else {
+            notify(result.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function eliminarParteEquipo(pid) {
+    if (!confirm('Eliminar esta parte?')) return;
+    try {
+        const res = await fetch(`${API}/api/equipos/partes/${pid}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (result.success) {
+            notify('Parte eliminada', 'success');
+            await cargarPartesEquipo(editingEquipoId);
+        } else {
+            notify(result.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function guardarEdicionEquipo() {
+    const eid = document.getElementById('edit-eq-id').value;
+    const body = {
+        codigo: document.getElementById('edit-eq-codigo').value.trim(),
+        nombre: document.getElementById('edit-eq-nombre').value.trim(),
+        marca: document.getElementById('edit-eq-marca').value.trim(),
+        modelo: document.getElementById('edit-eq-modelo').value.trim(),
+        categoria: document.getElementById('edit-eq-categoria').value,
+        precio_lista: parseFloat(document.getElementById('edit-eq-precio-lista').value) || 0,
+        precio_minimo: parseFloat(document.getElementById('edit-eq-precio-minimo').value) || 0,
+        precio_costo: parseFloat(document.getElementById('edit-eq-precio-costo').value) || 0,
+        potencia_motor: document.getElementById('edit-eq-potencia').value.trim(),
+        capacidad: document.getElementById('edit-eq-capacidad').value.trim(),
+        dimensiones: document.getElementById('edit-eq-dimensiones').value.trim(),
+        peso: document.getElementById('edit-eq-peso').value.trim(),
+        especificaciones: document.getElementById('edit-eq-especificaciones').value.trim(),
+        descripcion: document.getElementById('edit-eq-descripcion').value.trim()
+    };
+    if (!body.codigo || !body.nombre) {
+        notify('Codigo y Nombre son obligatorios', 'error'); return;
+    }
+    try {
+        const res = await fetch(`${API}/api/equipos/${eid}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await res.json();
+        if (result.success) {
+            notify('Equipo actualizado', 'success');
+            closeModal('modal-editar-equipo');
+            loadCatalogo();
+        } else {
+            notify(result.error || 'Error', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');
@@ -1178,6 +1346,7 @@ async function loadProveedores() {
         proveedoresData = data;
         renderProveedores();
         populateReqProveedorSelect(); // Populate main select
+        populateReqEquipoSelect(); // Populate equipo select
     } catch (e) {
         notify('Error al cargar proveedores: ' + e.message, 'error');
     }
@@ -1308,7 +1477,7 @@ formReq.addEventListener('submit', async (e) => {
 
     const body = {
         inventario_id: null,
-        equipo_nombre: document.getElementById('req-equipo').value.trim(),
+        equipo_nombre: document.getElementById('req-equipo').selectedOptions[0]?.text || '',
         no_control: document.getElementById('req-no-control').value.trim(),
         area: document.getElementById('req-area').value.trim(),
         proveedor_id: mainProvId || null,
@@ -1350,6 +1519,49 @@ function populateReqProveedorSelect() {
     AVAILABLE_PROVIDERS.forEach(p => {
         sel.innerHTML += `<option value="${p.id}">${p.razon_social}</option>`;
     });
+}
+
+function populateReqEquipoSelect() {
+    const sel = document.getElementById('req-equipo');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- Seleccionar equipo del catalogo --</option>';
+    equiposCatalogo.forEach(eq => {
+        sel.innerHTML += `<option value="${eq.id}">${eq.codigo} - ${eq.nombre}</option>`;
+    });
+}
+
+async function cargarPartesRequisicion(equipoId) {
+    if (!equipoId) return;
+    try {
+        const res = await fetch(`${API}/api/equipos/${equipoId}/partes`);
+        const partes = await res.json();
+        if (!partes || partes.length === 0) return;
+
+        // Clear existing items
+        document.getElementById('req-items-container').innerHTML = '';
+        reqItemCounter = 0;
+
+        // Add each part as a requisition item row
+        partes.forEach(parte => {
+            addReqItem();
+            const rows = document.querySelectorAll('.req-item-row');
+            const lastRow = rows[rows.length - 1];
+            if (lastRow) {
+                const compInput = lastRow.querySelector('.req-comp');
+                const cantInput = lastRow.querySelector('.req-cant');
+                const unidadInput = lastRow.querySelector('.req-unidad');
+                const comentInput = lastRow.querySelector('.req-coment');
+                if (compInput) compInput.value = parte.nombre_parte;
+                if (cantInput) cantInput.value = parte.cantidad || 1;
+                if (unidadInput) unidadInput.value = parte.unidad || 'pza';
+                if (comentInput && parte.descripcion) comentInput.value = parte.descripcion;
+            }
+        });
+        updateReqGrandTotal();
+        notify(`${partes.length} partes cargadas del catalogo`, 'success');
+    } catch (e) {
+        console.error('Error cargando partes:', e);
+    }
 }
 
 async function verRequisicion(rid) {
@@ -1444,7 +1656,7 @@ async function verRequisicion(rid) {
         itemsHtml += `</tbody></table></div>`;
 
         // Send Actions
-        let sendActionsHtml = '<div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-top:10px;"><h4>📤 Enviar Pedidos por Proveedor</h4>';
+        let sendActionsHtml = '<div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-top:10px;"><h4>Enviar Pedidos por Proveedor</h4>';
 
         Object.keys(itemsByProv).forEach(pName => {
             if (pName === 'Sin Asignar') return;
@@ -1453,8 +1665,8 @@ async function verRequisicion(rid) {
                 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px; margin-bottom:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
                     <span><strong>${pName}</strong> (${itemsByProv[pName].length} partidas - $${provTotal.toFixed(2)})</span>
                     <div style="gap:5px; display:flex;">
-                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName}')">📱 WhatsApp</button>
-                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName}')">📧 Email</button>
+                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName}')">WhatsApp</button>
+                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName}')">Email</button>
                     </div>
                 </div>
             `;
@@ -1468,7 +1680,7 @@ async function verRequisicion(rid) {
         // Etiqueta Section
         const etiquetaHtml = `
             <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; margin-top:15px; border:1px solid rgba(255,255,255,0.1);">
-                <h4>🏷 Generar Etiqueta de Equipo</h4>
+                <h4>Generar Etiqueta de Equipo</h4>
                 <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Llena los datos del equipo para generar la etiqueta PNG. Puedes descargarla o enviarla por email.</p>
                 <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
                     <div class="form-group">
@@ -1509,12 +1721,12 @@ async function verRequisicion(rid) {
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})">⬇ Descargar Etiqueta PNG</button>
+                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})">Descargar Etiqueta PNG</button>
                     <div class="form-group" style="flex:1; margin:0;">
                         <label>Email destino</label>
                         <input type="email" id="etq-email" placeholder="correo@ejemplo.com" style="margin:0;">
                     </div>
-                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">📧 Enviar Etiqueta</button>
+                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">Enviar Etiqueta</button>
                 </div>
             </div>
         `;

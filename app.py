@@ -118,6 +118,24 @@ def run_migrations():
             except Exception:
                 pass
 
+        # Tabla equipo_partes para partes técnicas por máquina
+        partes_table = [
+            """CREATE TABLE IF NOT EXISTS equipo_partes (
+                id SERIAL PRIMARY KEY,
+                equipo_id INTEGER NOT NULL REFERENCES equipos(id) ON DELETE CASCADE,
+                nombre_parte VARCHAR(200) NOT NULL,
+                descripcion TEXT,
+                cantidad INTEGER DEFAULT 1,
+                unidad VARCHAR(50) DEFAULT 'pza',
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+        ]
+        for sql in partes_table:
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
+
         conn.commit()
         cur.close()
         conn.close()
@@ -403,6 +421,93 @@ def delete_equipo(eid):
         cur.close()
         conn.close()
         return jsonify({'success': True, 'message': 'Equipo eliminado del catalogo'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/equipos/<int:eid>', methods=['PUT'])
+def update_equipo(eid):
+    try:
+        d = request.json
+        if not d:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+
+        def to_float(val, default=0):
+            try:
+                v = float(val) if val not in (None, '', 'null') else default
+                return v
+            except (ValueError, TypeError):
+                return default
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE equipos SET
+                codigo=%s, nombre=%s, marca=%s, modelo=%s, descripcion=%s, categoria=%s,
+                precio_lista=%s, precio_minimo=%s, precio_costo=%s,
+                potencia_motor=%s, capacidad=%s, dimensiones=%s, peso=%s, especificaciones=%s
+            WHERE id=%s
+        ''', (
+            (d.get('codigo') or '').strip(), (d.get('nombre') or '').strip(),
+            d.get('marca') or '', d.get('modelo') or '',
+            d.get('descripcion') or '', d.get('categoria') or '',
+            to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
+            d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
+            d.get('peso') or '', d.get('especificaciones') or '',
+            eid
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Equipo actualizado'})
+    except Exception as e:
+        print(f'Error actualizando equipo: {e}')
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PARTES TECNICAS POR EQUIPO ====================
+@app.route('/api/equipos/<int:eid>/partes')
+def get_equipo_partes(eid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM equipo_partes WHERE equipo_id=%s ORDER BY id ASC', (eid,))
+        data = cur.fetchall()
+        cur.close()
+        conn.close()
+        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/equipos/<int:eid>/partes', methods=['POST'])
+def add_equipo_parte(eid):
+    try:
+        d = request.json
+        nombre = (d.get('nombre_parte') or '').strip()
+        if not nombre:
+            return jsonify({'error': 'Nombre de parte es obligatorio'}), 400
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO equipo_partes (equipo_id, nombre_parte, descripcion, cantidad, unidad)
+            VALUES (%s,%s,%s,%s,%s) RETURNING id
+        ''', (eid, nombre, d.get('descripcion') or '', d.get('cantidad', 1), d.get('unidad') or 'pza'))
+        pid = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': pid, 'message': 'Parte agregada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/equipos/partes/<int:pid>', methods=['DELETE'])
+def delete_equipo_parte(pid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM equipo_partes WHERE id=%s', (pid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Parte eliminada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

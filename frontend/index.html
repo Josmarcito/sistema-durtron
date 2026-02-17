@@ -26,32 +26,32 @@
         </div>
         <nav class="nav">
             <button class="nav-btn active" data-section="dashboard">
-                <span class="nav-icon">&#128202;</span> Dashboard
+                Dashboard
             </button>
             <button class="nav-btn" data-section="catalogo">
-                <span class="nav-icon">&#128221;</span> Catalogo
+                Catalogo
             </button>
             <button class="nav-btn" data-section="inventario">
-                <span class="nav-icon">&#128230;</span> Inventario
+                Inventario
             </button>
             <button class="nav-btn" data-section="ventas">
-                <span class="nav-icon">&#128176;</span> Ventas
+                Ventas
             </button>
             <button class="nav-btn" data-section="vendedores">
-                <span class="nav-icon">&#128101;</span> Vendedores
+                Vendedores
             </button>
             <button class="nav-btn" data-section="cotizaciones">
-                <span class="nav-icon">&#128196;</span> Cotizaciones
+                Cotizaciones
             </button>
             <button class="nav-btn" data-section="proveedores">
-                <span class="nav-icon">&#128666;</span> Proveedores
+                Proveedores
             </button>
             <button class="nav-btn" data-section="requisiciones">
-                <span class="nav-icon">&#128203;</span> Requisiciones
+                Requisiciones
             </button>
         </nav>
         <div class="sidebar-footer">
-            <button class="btn-logout" onclick="cerrarSesion()">&#x2716; Cerrar sesion</button>
+            <button class="btn-logout" onclick="cerrarSesion()">Cerrar sesion</button>
         </div>
     </aside>
 
@@ -232,6 +232,115 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Modal Editar Equipo -->
+            <div class="modal" id="modal-editar-equipo">
+                <div class="modal-content modal-lg" style="max-width:90%;">
+                    <div class="modal-header">
+                        <h3>Editar Equipo del Catalogo</h3>
+                        <button class="modal-close" onclick="closeModal('modal-editar-equipo')">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="form-editar-equipo" class="form-grid">
+                            <input type="hidden" id="edit-eq-id">
+                            <div class="form-group">
+                                <label for="edit-eq-codigo">Codigo / ID *</label>
+                                <input type="text" id="edit-eq-codigo" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-nombre">Nombre del Equipo *</label>
+                                <input type="text" id="edit-eq-nombre" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-marca">Marca</label>
+                                <input type="text" id="edit-eq-marca">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-modelo">Modelo</label>
+                                <input type="text" id="edit-eq-modelo">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-categoria">Categoria</label>
+                                <select id="edit-eq-categoria">
+                                    <option value="">Seleccionar...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-precio-lista">Precio de Lista *</label>
+                                <input type="number" id="edit-eq-precio-lista" step="0.01" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-precio-minimo">Precio Minimo *</label>
+                                <input type="number" id="edit-eq-precio-minimo" step="0.01" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-precio-costo">Precio de Costo</label>
+                                <input type="number" id="edit-eq-precio-costo" step="0.01" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-potencia">Potencia Motor</label>
+                                <input type="text" id="edit-eq-potencia" placeholder="15 HP">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-capacidad">Capacidad</label>
+                                <input type="text" id="edit-eq-capacidad" placeholder="5-20 TPH">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-dimensiones">Dimensiones</label>
+                                <input type="text" id="edit-eq-dimensiones" placeholder="2.5 x 1.5 x 1.8 m">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-eq-peso">Peso</label>
+                                <input type="text" id="edit-eq-peso" placeholder="3500 kg">
+                            </div>
+                            <div class="form-group full-width">
+                                <label for="edit-eq-especificaciones">Especificaciones</label>
+                                <textarea id="edit-eq-especificaciones" rows="2"></textarea>
+                            </div>
+                            <div class="form-group full-width">
+                                <label for="edit-eq-descripcion">Descripcion</label>
+                                <textarea id="edit-eq-descripcion" rows="2"></textarea>
+                            </div>
+                        </form>
+
+                        <!-- Partes Tecnicas -->
+                        <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.1); padding-top:1rem;">
+                            <h4>Partes Tecnicas del Equipo</h4>
+                            <p style="color:#888; font-size:0.85rem;">Componentes y partes que conforman este equipo. Se
+                                cargan automaticamente al crear una requisicion.</p>
+                            <div id="edit-eq-partes-list" style="margin:10px 0;"></div>
+                            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-top:8px;">
+                                <div class="form-group" style="flex:2;margin:0;">
+                                    <label>Nombre de la Parte</label>
+                                    <input type="text" id="nueva-parte-nombre"
+                                        placeholder="Ej: Polea principal, Motor 15HP">
+                                </div>
+                                <div class="form-group" style="flex:2;margin:0;">
+                                    <label>Descripcion</label>
+                                    <input type="text" id="nueva-parte-desc" placeholder="Descripcion opcional">
+                                </div>
+                                <div class="form-group" style="flex:0.5;margin:0;">
+                                    <label>Cant</label>
+                                    <input type="number" id="nueva-parte-cant" value="1" min="1">
+                                </div>
+                                <div class="form-group" style="flex:0.5;margin:0;">
+                                    <label>Unidad</label>
+                                    <input type="text" id="nueva-parte-unidad" value="pza">
+                                </div>
+                                <button type="button" class="btn btn-primary" onclick="agregarParteEquipo()"
+                                    style="height:38px;">+ Agregar Parte</button>
+                            </div>
+                        </div>
+
+                        <div class="form-actions full-width" style="margin-top:1.5rem; display:flex; gap:10px;">
+                            <button type="button" class="btn btn-primary" onclick="guardarEdicionEquipo()">Guardar
+                                Cambios</button>
+                            <button type="button" class="btn btn-secondary"
+                                onclick="closeModal('modal-editar-equipo')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- ============ INVENTARIO ============ -->
             <section id="inventario" class="section">
@@ -683,8 +792,9 @@
                         <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
                             <div class="form-group" style="flex:2">
                                 <label>PROYECTO / ORDEN DE PRODUCCIÓN *</label>
-                                <input type="text" id="req-equipo" placeholder="Ej: SHT-D01 (Mesa de Concentracion)"
-                                    required>
+                                <select id="req-equipo" required onchange="cargarPartesRequisicion(this.value)">
+                                    <option value="">-- Seleccionar equipo del catalogo --</option>
+                                </select>
                             </div>
                             <div class="form-group" style="flex:1">
                                 <label>No. CONTROL</label>
