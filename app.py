@@ -1505,19 +1505,13 @@ def generar_orden_requisicion_proveedor(rid, prov_name):
 @app.route('/api/requisiciones/<int:rid>/enviar-email', methods=['POST'])
 def enviar_requisicion_email(rid):
     try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
+        resend_key = os.environ.get('RESEND_API_KEY', '')
+        from_email = os.environ.get('SMTP_USER', '') or 'onboarding@resend.dev'
 
-        smtp_user = os.environ.get('SMTP_USER', '')
-        smtp_pass = os.environ.get('SMTP_PASS', '')
-        smtp_host = os.environ.get('SMTP_HOST', '') or os.environ.get('SMTP_SERVER', '') or 'smtp.gmail.com'
-        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
-        
+        if not resend_key:
+            return jsonify({'error': 'Configure RESEND_API_KEY en variables de entorno. Regístrese gratis en resend.com'}), 400
+
         target_proveedor = request.args.get('proveedor')
-
-        if not smtp_user or not smtp_pass:
-            return jsonify({'error': 'Credenciales SMTP no configuradas. Configure SMTP_USER y SMTP_PASS en variables de entorno.'}), 400
 
         conn = get_db()
         cur = conn.cursor()
@@ -1529,14 +1523,12 @@ def enviar_requisicion_email(rid):
             conn.close()
             return jsonify({'error': 'Requisicion no encontrada'}), 404
             
-        # Fetch items first
         if target_proveedor:
             cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s AND proveedor_nombre=%s ORDER BY id', (rid, target_proveedor))
         else:
             cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
         items = cur.fetchall()
 
-        # Then fetch provider
         prov_data = None
         if target_proveedor:
             cur.execute('SELECT * FROM proveedores WHERE razon_social=%s', (target_proveedor,))
@@ -1549,10 +1541,9 @@ def enviar_requisicion_email(rid):
         conn.close()
 
         if not items:
-            return jsonify({'error': 'No hay items para enviar (o para este proveedor)'}), 400
-            
+            return jsonify({'error': 'No hay items para enviar'}), 400
         if not prov_data:
-             return jsonify({'error': f'No se encontraron datos de contacto para el proveedor: {target_proveedor if target_proveedor else "Principal"}'}), 400
+            return jsonify({'error': f'No se encontraron datos del proveedor: {target_proveedor or "Principal"}'}), 400
 
         dest_email = prov_data.get('correo')
         if not dest_email:
@@ -1582,39 +1573,30 @@ DURTRON - Innovacion Industrial
 """
         subject = f"Requisicion {req['folio']} - {prov_data['razon_social']} - DURTRON"
 
-        # Send email in background thread to avoid Gunicorn worker timeout
-        def _send_email_bg():
+        def _send_resend():
             try:
-                msg = MIMEMultipart()
-                msg['From'] = smtp_user
-                msg['To'] = dest_email
-                msg['Subject'] = subject
-                msg.attach(MIMEText(body, 'plain'))
-
-                # Try port 465 (SSL) first, then 587 (STARTTLS) as fallback
-                import socket
-                ipv4_addr = socket.getaddrinfo(smtp_host, None, socket.AF_INET)[0][4][0]
-                server = None
-                try:
-                    print(f'[EMAIL] Trying SSL port 465 to {smtp_host} ({ipv4_addr})...')
-                    server = smtplib.SMTP_SSL(ipv4_addr, 465, timeout=30)
-                    server.ehlo(smtp_host)
-                except Exception as e465:
-                    print(f'[EMAIL] Port 465 failed ({e465}), trying port 587...')
-                    server = smtplib.SMTP(ipv4_addr, 587, timeout=30)
-                    server.ehlo(smtp_host)
-                    server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
-                server.quit()
-                print(f'[EMAIL] ✓ Sent to {dest_email} OK')
+                import urllib.request
+                payload = json.dumps({
+                    "from": from_email,
+                    "to": [dest_email],
+                    "subject": subject,
+                    "text": body
+                }).encode('utf-8')
+                rq = urllib.request.Request(
+                    'https://api.resend.com/emails',
+                    data=payload,
+                    headers={'Authorization': f'Bearer {resend_key}', 'Content-Type': 'application/json'}
+                )
+                print(f'[EMAIL] Sending via Resend API to {dest_email}...')
+                resp = urllib.request.urlopen(rq, timeout=15)
+                result = json.loads(resp.read())
+                print(f'[EMAIL] ✓ Sent OK - id: {result.get("id")}')
             except Exception as e:
                 print(f'[EMAIL ERROR] {e}')
                 traceback.print_exc()
 
-        t = threading.Thread(target=_send_email_bg, daemon=True)
+        t = threading.Thread(target=_send_resend, daemon=True)
         t.start()
-
         return jsonify({'success': True, 'message': f'Email en proceso de envío a {dest_email}'})
     except Exception as e:
         print(f'[EMAIL ERROR] {e}')
@@ -1763,25 +1745,20 @@ def generar_etiqueta_requisicion(rid):
 
 @app.route('/api/requisiciones/<int:rid>/enviar-etiqueta', methods=['POST'])
 def enviar_etiqueta_email(rid):
-    """Genera la etiqueta PNG y la envia como adjunto al email indicado"""
+    """Genera la etiqueta PNG y la envia como adjunto al email via Resend API"""
     try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.image import MIMEImage
+        import base64
 
         d = request.json or {}
         dest_email = d.get('email', '')
         if not dest_email:
             return jsonify({'error': 'Debe indicar un correo destino'}), 400
 
-        smtp_user = os.environ.get('SMTP_USER', '')
-        smtp_pass = os.environ.get('SMTP_PASS', '')
-        smtp_host = os.environ.get('SMTP_HOST', '') or os.environ.get('SMTP_SERVER', '') or 'smtp.gmail.com'
-        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+        resend_key = os.environ.get('RESEND_API_KEY', '')
+        from_email = os.environ.get('SMTP_USER', '') or 'onboarding@resend.dev'
 
-        if not smtp_user or not smtp_pass:
-            return jsonify({'error': 'Credenciales SMTP no configuradas. Configure SMTP_USER y SMTP_PASS.'}), 400
+        if not resend_key:
+            return jsonify({'error': 'Configure RESEND_API_KEY en variables de entorno. Regístrese gratis en resend.com'}), 400
 
         # Get req info
         conn = get_db()
@@ -1857,7 +1834,6 @@ def enviar_etiqueta_email(rid):
         img.save(buf, format='PNG')
         img_bytes = buf.getvalue()
 
-        # Send email in background thread to avoid Gunicorn timeout
         subject = f"Etiqueta de Equipo - {equipo} - DURTRON"
         body_text = f"""Adjuntamos la etiqueta de identificación del equipo:
 
@@ -1868,41 +1844,36 @@ Saludos,
 DURTRON - Innovacion Industrial
 Tel: 618 134 1056
 """
+        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+        filename = f'etiqueta_{equipo.replace(" ", "_")}.png'
 
-        def _send_etiqueta_bg():
+        def _send_etiqueta_resend():
             try:
-                msg = MIMEMultipart()
-                msg['From'] = smtp_user
-                msg['To'] = dest_email
-                msg['Subject'] = subject
-                msg.attach(MIMEText(body_text, 'plain'))
-
-                img_attachment = MIMEImage(img_bytes, name=f'etiqueta_{equipo.replace(" ", "_")}.png')
-                img_attachment.add_header('Content-Disposition', 'attachment', filename=f'etiqueta_{equipo.replace(" ", "_")}.png')
-                msg.attach(img_attachment)
-
-                # Try port 465 (SSL) first, then 587 (STARTTLS) as fallback
-                import socket
-                ipv4_addr = socket.getaddrinfo(smtp_host, None, socket.AF_INET)[0][4][0]
-                server = None
-                try:
-                    print(f'[EMAIL-ETQ] Trying SSL port 465 to {smtp_host} ({ipv4_addr})...')
-                    server = smtplib.SMTP_SSL(ipv4_addr, 465, timeout=30)
-                    server.ehlo(smtp_host)
-                except Exception as e465:
-                    print(f'[EMAIL-ETQ] Port 465 failed ({e465}), trying port 587...')
-                    server = smtplib.SMTP(ipv4_addr, 587, timeout=30)
-                    server.ehlo(smtp_host)
-                    server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
-                server.quit()
-                print(f'[EMAIL-ETQ] ✓ Etiqueta sent to {dest_email} OK')
+                import urllib.request
+                payload = json.dumps({
+                    "from": from_email,
+                    "to": [dest_email],
+                    "subject": subject,
+                    "text": body_text,
+                    "attachments": [{
+                        "filename": filename,
+                        "content": img_b64
+                    }]
+                }).encode('utf-8')
+                rq = urllib.request.Request(
+                    'https://api.resend.com/emails',
+                    data=payload,
+                    headers={'Authorization': f'Bearer {resend_key}', 'Content-Type': 'application/json'}
+                )
+                print(f'[EMAIL-ETQ] Sending via Resend API to {dest_email}...')
+                resp = urllib.request.urlopen(rq, timeout=15)
+                result = json.loads(resp.read())
+                print(f'[EMAIL-ETQ] ✓ Sent OK - id: {result.get("id")}')
             except Exception as e:
                 print(f'[EMAIL-ETQ ERROR] {e}')
                 traceback.print_exc()
 
-        t = threading.Thread(target=_send_etiqueta_bg, daemon=True)
+        t = threading.Thread(target=_send_etiqueta_resend, daemon=True)
         t.start()
 
         return jsonify({'success': True, 'message': f'Etiqueta en proceso de envío a {dest_email}'})
