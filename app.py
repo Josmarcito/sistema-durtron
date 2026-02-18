@@ -1510,7 +1510,7 @@ def enviar_requisicion_email(rid):
 
         smtp_user = os.environ.get('SMTP_USER', '')
         smtp_pass = os.environ.get('SMTP_PASS', '')
-        smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_host = os.environ.get('SMTP_HOST', '') or os.environ.get('SMTP_SERVER', '') or 'smtp.gmail.com'
         smtp_port = int(os.environ.get('SMTP_PORT', '587'))
         
         target_proveedor = request.args.get('proveedor')
@@ -1524,26 +1524,26 @@ def enviar_requisicion_email(rid):
         cur.execute('SELECT * FROM requisiciones WHERE id=%s', (rid,))
         req = cur.fetchone()
         if not req:
+            cur.close()
+            conn.close()
             return jsonify({'error': 'Requisicion no encontrada'}), 404
             
-        # Filter items and get provider info
+        # Fetch items first
         if target_proveedor:
             cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s AND proveedor_nombre=%s ORDER BY id', (rid, target_proveedor))
-            cur.execute('SELECT * FROM proveedores WHERE razon_social=%s', (target_proveedor,))
-            prov_data = cur.fetchone()
         else:
             cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
-            prov_data = None
-            if req.get('proveedor_id'):
-                cur.execute('SELECT * FROM proveedores WHERE id=%s', (req['proveedor_id'],))
-                prov_data = cur.fetchone()
-
-            # If no provider data found in main, but items have providers?
-            # We can't batch send to everyone in one email easily.
-            # So if no target_provider is set, and main provider is set, send to main.
-            # If main provider is NOT set, we can't send.
-        
         items = cur.fetchall()
+
+        # Then fetch provider
+        prov_data = None
+        if target_proveedor:
+            cur.execute('SELECT * FROM proveedores WHERE razon_social=%s', (target_proveedor,))
+            prov_data = cur.fetchone()
+        elif req.get('proveedor_id'):
+            cur.execute('SELECT * FROM proveedores WHERE id=%s', (req['proveedor_id'],))
+            prov_data = cur.fetchone()
+        
         cur.close()
         conn.close()
 
@@ -1585,14 +1585,19 @@ DURTRON - Innovacion Industrial
         msg['Subject'] = f"Requisicion {req['folio']} - {prov_data['razon_social']} - DURTRON"
         msg.attach(MIMEText(body, 'plain'))
 
-        server = smtplib.SMTP(smtp_host, smtp_port)
+        print(f'[EMAIL] Connecting to {smtp_host}:{smtp_port} as {smtp_user}...')
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
+        print(f'[EMAIL] Sent to {dest_email} OK')
 
         return jsonify({'success': True, 'message': f'Email enviado a {dest_email}'})
     except Exception as e:
+        print(f'[EMAIL ERROR] {e}')
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/requisiciones/<int:rid>/whatsapp-url', methods=['GET'])
@@ -1751,7 +1756,7 @@ def enviar_etiqueta_email(rid):
 
         smtp_user = os.environ.get('SMTP_USER', '')
         smtp_pass = os.environ.get('SMTP_PASS', '')
-        smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_host = os.environ.get('SMTP_HOST', '') or os.environ.get('SMTP_SERVER', '') or 'smtp.gmail.com'
         smtp_port = int(os.environ.get('SMTP_PORT', '587'))
 
         if not smtp_user or not smtp_pass:
