@@ -1506,7 +1506,7 @@ def generar_orden_requisicion_proveedor(rid, prov_name):
 def enviar_requisicion_email(rid):
     try:
         resend_key = os.environ.get('RESEND_API_KEY', '')
-        from_email = os.environ.get('SMTP_USER', '') or 'onboarding@resend.dev'
+        from_email = os.environ.get('RESEND_FROM', 'Durtron <onboarding@resend.dev>')
 
         if not resend_key:
             return jsonify({'error': 'Configure RESEND_API_KEY en variables de entorno. Regístrese gratis en resend.com'}), 400
@@ -1755,7 +1755,7 @@ def enviar_etiqueta_email(rid):
             return jsonify({'error': 'Debe indicar un correo destino'}), 400
 
         resend_key = os.environ.get('RESEND_API_KEY', '')
-        from_email = os.environ.get('SMTP_USER', '') or 'onboarding@resend.dev'
+        from_email = os.environ.get('RESEND_FROM', 'Durtron <onboarding@resend.dev>')
 
         if not resend_key:
             return jsonify({'error': 'Configure RESEND_API_KEY en variables de entorno. Regístrese gratis en resend.com'}), 400
