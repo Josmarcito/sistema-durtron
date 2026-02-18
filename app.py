@@ -1591,8 +1591,12 @@ DURTRON - Innovacion Industrial
                 msg['Subject'] = subject
                 msg.attach(MIMEText(body, 'plain'))
 
-                print(f'[EMAIL] Connecting to {smtp_host}:{smtp_port} as {smtp_user}...')
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                # Force IPv4 to avoid Render IPv6 unreachable error
+                import socket
+                ipv4_addr = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET)[0][4][0]
+                print(f'[EMAIL] Connecting to {smtp_host} ({ipv4_addr}):{smtp_port} as {smtp_user}...')
+                server = smtplib.SMTP(ipv4_addr, smtp_port, timeout=30)
+                server.ehlo(smtp_host)
                 server.starttls()
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
@@ -1871,8 +1875,12 @@ Tel: 618 134 1056
                 img_attachment.add_header('Content-Disposition', 'attachment', filename=f'etiqueta_{equipo.replace(" ", "_")}.png')
                 msg.attach(img_attachment)
 
-                print(f'[EMAIL-ETQ] Connecting to {smtp_host}:{smtp_port} as {smtp_user}...')
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                # Force IPv4 to avoid Render IPv6 unreachable error
+                import socket
+                ipv4_addr = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET)[0][4][0]
+                print(f'[EMAIL-ETQ] Connecting to {smtp_host} ({ipv4_addr}):{smtp_port} as {smtp_user}...')
+                server = smtplib.SMTP(ipv4_addr, smtp_port, timeout=30)
+                server.ehlo(smtp_host)
                 server.starttls()
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
