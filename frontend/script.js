@@ -1803,14 +1803,14 @@ async function verRequisicion(rid) {
 
 async function enviarReqWhatsApp(rid, provName, equipoNombre) {
     try {
-        // 1. Find equipo_id from catalog
-        const equipo = equiposCatalogo.find(e =>
-            e.nombre === equipoNombre ||
-            `${e.codigo} - ${e.nombre}` === equipoNombre ||
-            e.codigo === equipoNombre
+        // 1. Fetch requisition detail to get items for this provider
+        const reqRes = await fetch(`${API}/api/requisiciones/${rid}`);
+        const reqData = await reqRes.json();
+        const provItems = (reqData.items || []).filter(it =>
+            (it.proveedor_nombre || '').toLowerCase() === provName.toLowerCase()
         );
 
-        // 2. Find proveedor from the API  
+        // 2. Find proveedor in API to get WhatsApp number
         const provRes = await fetch(`${API}/api/proveedores`);
         const proveedores = await provRes.json();
         const prov = (Array.isArray(proveedores) ? proveedores : []).find(p => p.razon_social === provName);
@@ -1820,29 +1820,29 @@ async function enviarReqWhatsApp(rid, provName, equipoNombre) {
             return;
         }
 
-        // 3. Download the PDF/order image if equipo found
-        if (equipo) {
-            try {
-                const pdfUrl = `${API}/api/equipos/${equipo.id}/orden-proveedor/${prov.id}`;
-                const pdfRes = await fetch(pdfUrl);
-                if (pdfRes.ok) {
-                    const blob = await pdfRes.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `orden_${equipo.codigo}_${provName.replace(/ /g, '_')}.png`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                    notify('Documento de orden descargado. Adjuntalo en WhatsApp.', 'success');
-                }
-            } catch (pdfErr) {
-                console.warn('No se pudo descargar PDF:', pdfErr);
+        // 3. Download per-provider requisition PNG
+        try {
+            const pdfUrl = `${API}/api/requisiciones/${rid}/orden-proveedor/${encodeURIComponent(provName)}`;
+            const pdfRes = await fetch(pdfUrl);
+            if (pdfRes.ok) {
+                const blob = await pdfRes.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `req_${reqData.folio || 'REQ'}_${provName.replace(/ /g, '_')}.png`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                notify('Documento de orden descargado. Adjuntalo en WhatsApp.', 'success');
+            } else {
+                notify('No se pudo generar el documento PNG', 'error');
             }
+        } catch (pdfErr) {
+            console.warn('No se pudo descargar PDF:', pdfErr);
         }
 
-        // 4. Open WhatsApp with pre-filled message template
+        // 4. Compose WhatsApp message with itemized list for THIS provider only
         const whatsapp = prov.whatsapp || prov.telefono || '';
         if (!whatsapp) {
             notify(`El proveedor "${provName}" no tiene WhatsApp registrado`, 'error');
@@ -1850,7 +1850,20 @@ async function enviarReqWhatsApp(rid, provName, equipoNombre) {
         }
         const contacto = prov.contacto_nombre || provName;
         const proyecto = equipoNombre || 'proyecto en curso';
-        const mensaje = `Hola ${contacto}, somos *DURTRON - Innovacion Industrial*.\n\nSolicitamos cotizacion de materiales para el proyecto: *${proyecto}*.\n\nSe adjunta documento con el detalle de las partes requeridas.\n\nQuedamos atentos a su respuesta con precios y tiempos de entrega.\n\nGracias.`;
+        const folio = reqData.folio || '';
+
+        // Build material list
+        let materialList = '';
+        let totalProv = 0;
+        provItems.forEach((it, idx) => {
+            const cant = parseFloat(it.cantidad) || 0;
+            const precio = parseFloat(it.precio_unitario) || 0;
+            const sub = cant * precio;
+            totalProv += it.tiene_iva ? sub * 1.16 : sub;
+            materialList += `${idx + 1}. ${it.componente} — Cant: ${cant}${precio > 0 ? ` — P.U.: $${precio.toFixed(2)}` : ''}\n`;
+        });
+
+        const mensaje = `Hola ${contacto}, somos *DURTRON - Innovacion Industrial*.\n\nSolicitamos cotizacion de materiales para: *${proyecto}*\nRequisicion: *${folio}*\n\n*Material solicitado:*\n${materialList}\n${totalProv > 0 ? `_Total estimado: $${totalProv.toFixed(2)}_\n\n` : ''}Se adjunta documento con el detalle.\n\nFavor de responder con precios y tiempos de entrega.\n\nGracias.`;
 
         const tel = whatsapp.replace(/[^0-9]/g, '');
         const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
@@ -1858,7 +1871,7 @@ async function enviarReqWhatsApp(rid, provName, equipoNombre) {
         // Small delay so download completes first
         setTimeout(() => {
             window.open(waUrl, '_blank');
-        }, 800);
+        }, 1000);
 
     } catch (e) {
         notify('Error: ' + e.message, 'error');

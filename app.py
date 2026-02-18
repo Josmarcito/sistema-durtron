@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, session, redirect, Response
+from flask import Flask, request, jsonify, send_from_directory, send_file, session, redirect, Response
 from flask_cors import CORS
 from functools import wraps
 import psycopg2
@@ -1284,6 +1284,167 @@ def update_requisicion_estado(rid):
         conn.close()
         return jsonify({'success': True, 'message': 'Estado actualizado'})
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PDF ORDEN DE COMPRA POR PROVEEDOR (REQUISICION) ====================
+@app.route('/api/requisiciones/<int:rid>/orden-proveedor/<prov_name>', methods=['GET'])
+def generar_orden_requisicion_proveedor(rid, prov_name):
+    """Genera un PNG profesional con los items de una requisicion filtrados por proveedor"""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        from urllib.parse import unquote
+        prov_name = unquote(prov_name)
+
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Get requisicion header
+        cur.execute('''
+            SELECT r.*, p.razon_social as prov_razon, p.contacto_nombre as prov_contacto
+            FROM requisiciones r
+            LEFT JOIN proveedores p ON r.proveedor_id = p.id
+            WHERE r.id=%s
+        ''', (rid,))
+        req = cur.fetchone()
+        if not req:
+            cur.close(); conn.close()
+            return jsonify({'error': 'Requisicion no encontrada'}), 404
+
+        # Get items for this provider only
+        cur.execute('''
+            SELECT componente, comentario, cantidad, unidad, precio_unitario, tiene_iva, proveedor_nombre
+            FROM requisicion_items
+            WHERE requisicion_id=%s AND LOWER(proveedor_nombre) = LOWER(%s)
+            ORDER BY id ASC
+        ''', (rid, prov_name))
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not items:
+            return jsonify({'error': f'No hay items para proveedor {prov_name}'}), 404
+
+        # Generate image
+        W = 820
+        row_h = 32
+        H_header = 300
+        H_table = len(items) * row_h + 60  # header row + items
+        H_footer = 120
+        H = H_header + H_table + H_footer
+        img = Image.new('RGB', (W, H), '#FFFFFF')
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            font_head = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
+            font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+            font_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 10)
+        except:
+            font_title = ImageFont.load_default()
+            font_head = font_title
+            font_body = font_title
+            font_small = font_title
+            font_label = font_title
+
+        # Header bar
+        draw.rectangle([(0, 0), (W, 70)], fill='#1a1a2e')
+        draw.text((20, 12), "DURTRON", fill='#D2152B', font=font_title)
+        draw.text((20, 42), "Innovacion Industrial", fill='#8888a4', font=font_small)
+        draw.text((W - 280, 12), "SOLICITUD DE COTIZACION", fill='#FFFFFF', font=font_head)
+        draw.text((W - 280, 30), f"Folio: {req.get('folio', '-')}", fill='#F47427', font=font_body)
+        draw.text((W - 280, 48), f"Fecha: {datetime.now().strftime('%d/%m/%Y')}", fill='#cccccc', font=font_small)
+
+        # Orange accent line
+        draw.rectangle([(0, 70), (W, 74)], fill='#F47427')
+
+        y = 90
+        # Requisition info
+        draw.text((20, y), "PROVEEDOR:", fill='#888888', font=font_label)
+        draw.text((130, y), prov_name, fill='#000000', font=font_body)
+        y += 20
+        draw.text((20, y), "PROYECTO:", fill='#888888', font=font_label)
+        draw.text((130, y), req.get('equipo_nombre', '-') or '-', fill='#000000', font=font_body)
+        y += 20
+        draw.text((20, y), "AREA:", fill='#888888', font=font_label)
+        draw.text((130, y), req.get('area', '-') or '-', fill='#000000', font=font_body)
+        y += 20
+        draw.text((20, y), "NO. CONTROL:", fill='#888888', font=font_label)
+        draw.text((130, y), req.get('no_control', '-') or '-', fill='#000000', font=font_body)
+        y += 20
+        draw.text((20, y), "EMITIDO POR:", fill='#888888', font=font_label)
+        draw.text((130, y), req.get('emitido_por', '-') or '-', fill='#000000', font=font_body)
+        draw.text((400, y), "APROBADO POR:", fill='#888888', font=font_label)
+        draw.text((520, y), req.get('aprobado_por', '-') or '-', fill='#000000', font=font_body)
+        y += 25
+
+        # Separator
+        draw.line([(20, y), (W - 20, y)], fill='#D2152B', width=2)
+        y += 12
+
+        # Table header
+        cols = [20, 50, 280, 460, 530, 610, 720]
+        draw.rectangle([(20, y), (W - 20, y + 28)], fill='#1a1a2e')
+        draw.text((cols[0] + 5, y + 8), "#", fill='#FFFFFF', font=font_head)
+        draw.text((cols[1] + 5, y + 8), "COMPONENTE", fill='#FFFFFF', font=font_head)
+        draw.text((cols[2] + 5, y + 8), "COMENTARIOS", fill='#FFFFFF', font=font_head)
+        draw.text((cols[3] + 5, y + 8), "CANT.", fill='#FFFFFF', font=font_head)
+        draw.text((cols[4] + 5, y + 8), "P.UNIT", fill='#FFFFFF', font=font_head)
+        draw.text((cols[5] + 5, y + 8), "SUBTOTAL", fill='#FFFFFF', font=font_head)
+        draw.text((cols[6] + 5, y + 8), "IVA", fill='#FFFFFF', font=font_head)
+        y += 30
+
+        total_general = 0
+        for i, item in enumerate(items):
+            bg = '#FFFFFF' if i % 2 == 0 else '#f5f5f5'
+            draw.rectangle([(20, y), (W - 20, y + row_h)], fill=bg)
+
+            cant = float(item.get('cantidad', 1) or 1)
+            precio = float(item.get('precio_unitario', 0) or 0)
+            subtotal = cant * precio
+            tiene_iva = item.get('tiene_iva', False)
+            total_row = subtotal * 1.16 if tiene_iva else subtotal
+            total_general += total_row
+
+            draw.text((cols[0] + 5, y + 9), str(i + 1), fill='#333', font=font_body)
+            draw.text((cols[1] + 5, y + 9), str(item.get('componente', ''))[:30], fill='#000', font=font_body)
+            draw.text((cols[2] + 5, y + 9), str(item.get('comentario', ''))[:22], fill='#666', font=font_body)
+            draw.text((cols[3] + 5, y + 9), str(int(cant) if cant == int(cant) else cant), fill='#000', font=font_body)
+            draw.text((cols[4] + 5, y + 9), f"${precio:,.2f}", fill='#000', font=font_body)
+            draw.text((cols[5] + 5, y + 9), f"${subtotal:,.2f}", fill='#000', font=font_body)
+            draw.text((cols[6] + 5, y + 9), "Si" if tiene_iva else "No", fill='#000', font=font_body)
+            y += row_h
+
+        # Bottom border
+        draw.line([(20, y), (W - 20, y)], fill='#1a1a2e', width=2)
+        y += 10
+
+        # Totals
+        draw.rectangle([(W - 250, y), (W - 20, y + 28)], fill='#1a1a2e')
+        draw.text((W - 245, y + 7), f"TOTAL: ${total_general:,.2f}", fill='#F47427', font=font_head)
+        y += 45
+
+        # Notes
+        if req.get('notas'):
+            draw.text((20, y), "NOTAS:", fill='#888888', font=font_label)
+            draw.text((80, y), str(req.get('notas', ''))[:80], fill='#333', font=font_small)
+            y += 20
+
+        # Footer
+        draw.text((20, y), "DURTRON - Innovacion Industrial | Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056", fill='#999999', font=font_small)
+        y += 15
+        draw.text((20, y), "Favor de responder con precios y tiempos de entrega.", fill='#999999', font=font_small)
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        safe_name = prov_name.replace(' ', '_').replace('/', '_')
+        filename = f"req_{req.get('folio', 'REQ')}_{safe_name}.png"
+        return send_file(buf, mimetype='image/png', as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Error generando orden req proveedor: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/requisiciones/<int:rid>/enviar-email', methods=['POST'])
