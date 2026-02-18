@@ -1591,6 +1591,9 @@ DURTRON - Innovacion Industrial
                 resp = urllib.request.urlopen(rq, timeout=15)
                 result = json.loads(resp.read())
                 print(f'[EMAIL] ✓ Sent OK - id: {result.get("id")}')
+            except urllib.request.HTTPError as he:
+                err_body = he.read().decode('utf-8', errors='replace')
+                print(f'[EMAIL ERROR] HTTP {he.code}: {err_body}')
             except Exception as e:
                 print(f'[EMAIL ERROR] {e}')
                 traceback.print_exc()
@@ -1869,6 +1872,9 @@ Tel: 618 134 1056
                 resp = urllib.request.urlopen(rq, timeout=15)
                 result = json.loads(resp.read())
                 print(f'[EMAIL-ETQ] ✓ Sent OK - id: {result.get("id")}')
+            except urllib.request.HTTPError as he:
+                err_body = he.read().decode('utf-8', errors='replace')
+                print(f'[EMAIL-ETQ ERROR] HTTP {he.code}: {err_body}')
             except Exception as e:
                 print(f'[EMAIL-ETQ ERROR] {e}')
                 traceback.print_exc()
