@@ -1591,13 +1591,19 @@ DURTRON - Innovacion Industrial
                 msg['Subject'] = subject
                 msg.attach(MIMEText(body, 'plain'))
 
-                # Force IPv4 to avoid Render IPv6 unreachable error
+                # Try port 465 (SSL) first, then 587 (STARTTLS) as fallback
                 import socket
-                ipv4_addr = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET)[0][4][0]
-                print(f'[EMAIL] Connecting to {smtp_host} ({ipv4_addr}):{smtp_port} as {smtp_user}...')
-                server = smtplib.SMTP(ipv4_addr, smtp_port, timeout=30)
-                server.ehlo(smtp_host)
-                server.starttls()
+                ipv4_addr = socket.getaddrinfo(smtp_host, None, socket.AF_INET)[0][4][0]
+                server = None
+                try:
+                    print(f'[EMAIL] Trying SSL port 465 to {smtp_host} ({ipv4_addr})...')
+                    server = smtplib.SMTP_SSL(ipv4_addr, 465, timeout=30)
+                    server.ehlo(smtp_host)
+                except Exception as e465:
+                    print(f'[EMAIL] Port 465 failed ({e465}), trying port 587...')
+                    server = smtplib.SMTP(ipv4_addr, 587, timeout=30)
+                    server.ehlo(smtp_host)
+                    server.starttls()
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
                 server.quit()
@@ -1875,13 +1881,19 @@ Tel: 618 134 1056
                 img_attachment.add_header('Content-Disposition', 'attachment', filename=f'etiqueta_{equipo.replace(" ", "_")}.png')
                 msg.attach(img_attachment)
 
-                # Force IPv4 to avoid Render IPv6 unreachable error
+                # Try port 465 (SSL) first, then 587 (STARTTLS) as fallback
                 import socket
-                ipv4_addr = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET)[0][4][0]
-                print(f'[EMAIL-ETQ] Connecting to {smtp_host} ({ipv4_addr}):{smtp_port} as {smtp_user}...')
-                server = smtplib.SMTP(ipv4_addr, smtp_port, timeout=30)
-                server.ehlo(smtp_host)
-                server.starttls()
+                ipv4_addr = socket.getaddrinfo(smtp_host, None, socket.AF_INET)[0][4][0]
+                server = None
+                try:
+                    print(f'[EMAIL-ETQ] Trying SSL port 465 to {smtp_host} ({ipv4_addr})...')
+                    server = smtplib.SMTP_SSL(ipv4_addr, 465, timeout=30)
+                    server.ehlo(smtp_host)
+                except Exception as e465:
+                    print(f'[EMAIL-ETQ] Port 465 failed ({e465}), trying port 587...')
+                    server = smtplib.SMTP(ipv4_addr, 587, timeout=30)
+                    server.ehlo(smtp_host)
+                    server.starttls()
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
                 server.quit()
