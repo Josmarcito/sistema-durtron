@@ -1714,8 +1714,9 @@ async function verRequisicion(rid) {
                 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px; margin-bottom:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
                     <span><strong>${pName}</strong> (${itemsByProv[pName].length} partidas - $${provTotal.toFixed(2)})</span>
                     <div style="gap:5px; display:flex;">
-                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName.replace(/'/g, "\\'")}', '${eqName}')">WhatsApp + PDF</button>
-                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName.replace(/'/g, "\\'")}')">Email</button>
+                         <button class="btn btn-sm" style="background:#D2152B;color:#fff;" onclick="imprimirReqProveedor(${r.id}, '${pName.replace(/'/g, "\\'")}')" title="Generar PDF">&#128196; PDF</button>
+                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName.replace(/'/g, "\\'")}', '${eqName}')">&#128172; WhatsApp</button>
+                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName.replace(/'/g, "\\'")}')">&#9993; Email</button>
                     </div>
                 </div>
             `;
@@ -1820,29 +1821,7 @@ async function enviarReqWhatsApp(rid, provName, equipoNombre) {
             return;
         }
 
-        // 3. Download per-provider requisition PNG
-        try {
-            const pdfUrl = `${API}/api/requisiciones/${rid}/orden-proveedor/${encodeURIComponent(provName)}`;
-            const pdfRes = await fetch(pdfUrl);
-            if (pdfRes.ok) {
-                const blob = await pdfRes.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `req_${reqData.folio || 'REQ'}_${provName.replace(/ /g, '_')}.png`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                notify('Documento de orden descargado. Adjuntalo en WhatsApp.', 'success');
-            } else {
-                notify('No se pudo generar el documento PNG', 'error');
-            }
-        } catch (pdfErr) {
-            console.warn('No se pudo descargar PDF:', pdfErr);
-        }
-
-        // 4. Compose WhatsApp message with itemized list for THIS provider only
+        // 3. Compose WhatsApp message with itemized list for THIS provider only
         const whatsapp = prov.whatsapp || prov.telefono || '';
         if (!whatsapp) {
             notify(`El proveedor "${provName}" no tiene WhatsApp registrado`, 'error');
@@ -1867,14 +1846,192 @@ async function enviarReqWhatsApp(rid, provName, equipoNombre) {
 
         const tel = whatsapp.replace(/[^0-9]/g, '');
         const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
-
-        // Small delay so download completes first
-        setTimeout(() => {
-            window.open(waUrl, '_blank');
-        }, 1000);
+        window.open(waUrl, '_blank');
 
     } catch (e) {
         notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ==================== PDF POR PROVEEDOR (REQUISICION) ====================
+async function imprimirReqProveedor(rid, provName) {
+    try {
+        const reqRes = await fetch(`${API}/api/requisiciones/${rid}`);
+        const reqData = await reqRes.json();
+        const provItems = (reqData.items || []).filter(it =>
+            (it.proveedor_nombre || '').toLowerCase() === provName.toLowerCase()
+        );
+
+        if (provItems.length === 0) {
+            notify('No hay items para este proveedor', 'error');
+            return;
+        }
+
+        const folio = reqData.folio || '-';
+        const fecha = new Date(reqData.fecha_creacion).toLocaleDateString('es-MX');
+        const proyecto = reqData.equipo_nombre || '-';
+        const area = reqData.area || 'Departamento de Ingeniería';
+        const noControl = reqData.no_control || '-';
+        const emitido = reqData.emitido_por || '-';
+        const aprobado = reqData.aprobado_por || '-';
+        const revisado = reqData.revisado_por || '-';
+        const notas = reqData.notas || '';
+
+        // Calculate totals
+        let subtotalGen = 0;
+        let ivaGen = 0;
+        let totalGen = 0;
+
+        const itemsHtml = provItems.map((it, i) => {
+            const cant = parseFloat(it.cantidad) || 0;
+            const precio = parseFloat(it.precio_unitario) || 0;
+            const sub = cant * precio;
+            const iva = it.tiene_iva ? sub * 0.16 : 0;
+            const total = sub + iva;
+            subtotalGen += sub;
+            ivaGen += iva;
+            totalGen += total;
+            return `
+                <tr>
+                    <td style="text-align:center">${i + 1}</td>
+                    <td>${it.componente || ''}</td>
+                    <td><small>${it.comentario || ''}</small></td>
+                    <td style="text-align:center">${cant}</td>
+                    <td style="text-align:center">${it.unidad || 'pza'}</td>
+                    <td style="text-align:right">$${precio.toFixed(2)}</td>
+                    <td style="text-align:center">${it.tiene_iva ? 'Sí' : 'No'}</td>
+                    <td style="text-align:right"><strong>$${total.toFixed(2)}</strong></td>
+                </tr>
+            `;
+        }).join('');
+
+        const htmlContent = `
+            <html><head>
+            <title>Solicitud ${folio} - ${provName}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; padding: 0; color: #333; }
+                .req-pdf { max-width: 800px; margin: 0 auto; padding: 2rem; }
+                .req-pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+                .req-pdf-logo h1 { font-size: 2.2rem; font-weight: 800; color: #D2152B; letter-spacing: 2px; }
+                .req-pdf-logo span { color: #F47427; font-size: 0.85rem; font-weight: 600; }
+                .req-pdf-folio { text-align: right; font-size: 0.85rem; color: #555; }
+                .folio-number { font-size: 1.2rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.3rem; }
+                .req-pdf-divider { height: 4px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1.5rem; }
+                .req-pdf-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; }
+                .req-pdf-info-block h4 { color: #D2152B; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
+                .req-pdf-info-block p { font-size: 0.85rem; line-height: 1.6; }
+                .req-pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+                .req-pdf-table th { background: #1a1a2e; color: white; padding: 0.6rem 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+                .req-pdf-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.82rem; }
+                .req-pdf-table tr:nth-child(even) { background: #f8f9fa; }
+                .req-pdf-totals { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 1.5rem; }
+                .req-total-row { display: flex; justify-content: space-between; width: 280px; padding: 0.4rem 0; font-size: 0.9rem; border-bottom: 1px solid #eee; }
+                .req-total-final { border-top: 2px solid #1a1a2e; border-bottom: none; padding-top: 0.6rem; font-size: 1.1rem; color: #D2152B; }
+                .req-pdf-notas { background: #fffbeb; border-left: 3px solid #F47427; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; border-radius: 0 6px 6px 0; }
+                .req-pdf-notas h4 { color: #F47427; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.3rem; }
+                .req-pdf-footer { text-align: center; font-size: 0.75rem; color: #888; padding-top: 1rem; border-top: 1px solid #eee; }
+                .req-pdf-instrucciones { background: #f0f7ff; border-left: 3px solid #1a1a2e; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.8rem; border-radius: 0 6px 6px 0; }
+                .req-pdf-instrucciones h4 { color: #1a1a2e; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.3rem; }
+                @media print { body { padding: 0; } .req-pdf { padding: 1rem; } }
+            </style>
+            </head><body>
+            <div class="req-pdf">
+                <div class="req-pdf-header">
+                    <div class="req-pdf-logo">
+                        <h1>DURTRON</h1>
+                        <span>Innovacion Industrial</span>
+                    </div>
+                    <div class="req-pdf-folio">
+                        <div class="folio-number">${folio}</div>
+                        <div>SOLICITUD DE COTIZACIÓN</div>
+                        <div>Fecha: ${fecha}</div>
+                    </div>
+                </div>
+
+                <div class="req-pdf-divider"></div>
+
+                <div class="req-pdf-info-grid">
+                    <div class="req-pdf-info-block">
+                        <h4>Proveedor</h4>
+                        <p><strong>${provName}</strong></p>
+                    </div>
+                    <div class="req-pdf-info-block">
+                        <h4>Datos del Proyecto</h4>
+                        <p><strong>Proyecto:</strong> ${proyecto}</p>
+                        <p><strong>Área:</strong> ${area}</p>
+                        <p><strong>No. Control:</strong> ${noControl}</p>
+                    </div>
+                    <div class="req-pdf-info-block">
+                        <h4>Autorizaciones</h4>
+                        <p><strong>Emitido por:</strong> ${emitido}</p>
+                        <p><strong>Aprobado por:</strong> ${aprobado}</p>
+                        <p><strong>Revisado por:</strong> ${revisado}</p>
+                    </div>
+                    <div class="req-pdf-info-block">
+                        <h4>Datos de DURTRON</h4>
+                        <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                        <p>Av. del Sol #329, Durango, Dgo.</p>
+                        <p>Tel: 618 134 1056</p>
+                    </div>
+                </div>
+
+                <table class="req-pdf-table">
+                    <thead>
+                        <tr>
+                            <th style="width:35px">#</th>
+                            <th>Componente</th>
+                            <th>Comentarios</th>
+                            <th style="width:55px">Cant.</th>
+                            <th style="width:55px">Unidad</th>
+                            <th style="width:90px">P. Unit.</th>
+                            <th style="width:45px">IVA</th>
+                            <th style="width:100px">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemsHtml}</tbody>
+                </table>
+
+                <div class="req-pdf-totals">
+                    <div class="req-total-row">
+                        <span>Subtotal:</span>
+                        <strong>$${subtotalGen.toFixed(2)}</strong>
+                    </div>
+                    ${ivaGen > 0 ? `
+                    <div class="req-total-row">
+                        <span>IVA (16%):</span>
+                        <strong>$${ivaGen.toFixed(2)}</strong>
+                    </div>` : ''}
+                    <div class="req-total-row req-total-final">
+                        <span>TOTAL:</span>
+                        <strong>$${totalGen.toFixed(2)}</strong>
+                    </div>
+                </div>
+
+                ${notas ? `<div class="req-pdf-notas"><h4>Notas</h4><p>${notas}</p></div>` : ''}
+
+                <div class="req-pdf-instrucciones">
+                    <h4>Instrucciones</h4>
+                    <p>Favor de responder a la brevedad con <strong>precios</strong>, <strong>tiempos de entrega</strong> y <strong>disponibilidad</strong> de los materiales listados.</p>
+                </div>
+
+                <div class="req-pdf-footer">
+                    <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                    <p>Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
+                    <p style="margin-top:0.5rem; font-style:italic;">Este documento es una solicitud de cotizacion. No representa un compromiso de compra.</p>
+                </div>
+            </div>
+            <script>setTimeout(()=>{window.print();},500)<\/script>
+            </body></html>
+        `;
+
+        const win = window.open('', '_blank');
+        win.document.write(htmlContent);
+        win.document.close();
+
+    } catch (e) {
+        notify('Error al generar PDF: ' + e.message, 'error');
     }
 }
 
