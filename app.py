@@ -142,6 +142,18 @@ def run_migrations():
         for sql in req_items_cols:
              safe_execute(sql, "req_items col")
 
+        # Equipos label fields
+        equipos_label_cols = [
+            "ALTER TABLE equipos ADD COLUMN IF NOT EXISTS apertura VARCHAR(50)",
+            "ALTER TABLE equipos ADD COLUMN IF NOT EXISTS tamano_alimentacion VARCHAR(50)",
+            "ALTER TABLE equipos ADD COLUMN IF NOT EXISTS fecha_fabricacion DATE",
+        ]
+        for sql in equipos_label_cols:
+            safe_execute(sql, "equipos label col")
+
+        # Serial number counter table
+        safe_execute("CREATE TABLE IF NOT EXISTS serial_counters (equipo_codigo VARCHAR(50) PRIMARY KEY, last_serial INTEGER DEFAULT 0)", "serial_counters table")
+
         conn.commit()
         cur.close()
         conn.close()
@@ -384,14 +396,17 @@ def create_equipo():
         cur.execute('''
             INSERT INTO equipos (codigo, nombre, marca, modelo, descripcion, categoria,
                 precio_lista, precio_minimo, precio_costo,
-                potencia_motor, capacidad, dimensiones, peso, especificaciones)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                potencia_motor, capacidad, dimensiones, peso, especificaciones,
+                apertura, tamano_alimentacion, fecha_fabricacion)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
             codigo, nombre, d.get('marca') or '', d.get('modelo') or '',
             d.get('descripcion') or '', d.get('categoria') or '',
             to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
             d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
-            d.get('peso') or '', d.get('especificaciones') or ''
+            d.get('peso') or '', d.get('especificaciones') or '',
+            d.get('apertura') or '', d.get('tamano_alimentacion') or '',
+            d.get('fecha_fabricacion') or None
         ))
         eid = cur.fetchone()['id']
         conn.commit()
@@ -450,7 +465,8 @@ def update_equipo(eid):
             UPDATE equipos SET
                 codigo=%s, nombre=%s, marca=%s, modelo=%s, descripcion=%s, categoria=%s,
                 precio_lista=%s, precio_minimo=%s, precio_costo=%s,
-                potencia_motor=%s, capacidad=%s, dimensiones=%s, peso=%s, especificaciones=%s
+                potencia_motor=%s, capacidad=%s, dimensiones=%s, peso=%s, especificaciones=%s,
+                apertura=%s, tamano_alimentacion=%s, fecha_fabricacion=%s
             WHERE id=%s
         ''', (
             (d.get('codigo') or '').strip(), (d.get('nombre') or '').strip(),
@@ -459,6 +475,8 @@ def update_equipo(eid):
             to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
             d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
             d.get('peso') or '', d.get('especificaciones') or '',
+            d.get('apertura') or '', d.get('tamano_alimentacion') or '',
+            d.get('fecha_fabricacion') or None,
             eid
         ))
         conn.commit()

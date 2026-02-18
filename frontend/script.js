@@ -330,6 +330,9 @@ async function editarEquipo(eid) {
         document.getElementById('edit-eq-peso').value = eq.peso || '';
         document.getElementById('edit-eq-especificaciones').value = eq.especificaciones || '';
         document.getElementById('edit-eq-descripcion').value = eq.descripcion || '';
+        document.getElementById('edit-eq-apertura').value = eq.apertura || '';
+        document.getElementById('edit-eq-tamano-alimentacion').value = eq.tamano_alimentacion || '';
+        document.getElementById('edit-eq-fecha-fabricacion').value = eq.fecha_fabricacion ? eq.fecha_fabricacion.substring(0, 10) : '';
 
         // Set categoria
         const catSel = document.getElementById('edit-eq-categoria');
@@ -471,7 +474,10 @@ async function guardarEdicionEquipo() {
         dimensiones: document.getElementById('edit-eq-dimensiones').value.trim(),
         peso: document.getElementById('edit-eq-peso').value.trim(),
         especificaciones: document.getElementById('edit-eq-especificaciones').value.trim(),
-        descripcion: document.getElementById('edit-eq-descripcion').value.trim()
+        descripcion: document.getElementById('edit-eq-descripcion').value.trim(),
+        apertura: document.getElementById('edit-eq-apertura').value.trim(),
+        tamano_alimentacion: document.getElementById('edit-eq-tamano-alimentacion').value.trim(),
+        fecha_fabricacion: document.getElementById('edit-eq-fecha-fabricacion').value || null
     };
     if (!body.codigo || !body.nombre) {
         notify('Codigo y Nombre son obligatorios', 'error'); return;
@@ -769,7 +775,10 @@ function setupForms() {
                 dimensiones: document.getElementById('cat-dimensiones').value,
                 peso: document.getElementById('cat-peso').value,
                 especificaciones: document.getElementById('cat-especificaciones').value,
-                descripcion: document.getElementById('cat-descripcion').value
+                descripcion: document.getElementById('cat-descripcion').value,
+                apertura: document.getElementById('cat-apertura').value,
+                tamano_alimentacion: document.getElementById('cat-tamano-alimentacion').value,
+                fecha_fabricacion: document.getElementById('cat-fecha-fabricacion').value || null
             };
             const r = await fetch(`${API}/api/equipos`, {
                 method: 'POST',
@@ -1727,11 +1736,22 @@ async function verRequisicion(rid) {
         }
         sendActionsHtml += '</div>';
 
-        // Etiqueta Section
+        // Etiqueta Section — Equipment dropdown with auto-fill
+        let equipoOptions = '<option value="">-- Seleccionar equipo del catálogo --</option>';
+        equiposCatalogo.forEach(eq => {
+            equipoOptions += `<option value="${eq.id}">${eq.codigo} - ${eq.nombre}</option>`;
+        });
+
         const etiquetaHtml = `
             <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; margin-top:15px; border:1px solid rgba(255,255,255,0.1);">
-                <h4>Generar Etiqueta de Equipo</h4>
-                <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Llena los datos del equipo para generar la etiqueta PNG. Puedes descargarla o enviarla por email.</p>
+                <h4>&#127991; Generar Etiqueta de Equipo</h4>
+                <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Selecciona un equipo del catálogo para llenar automáticamente. El número de serie se genera automáticamente.</p>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label><strong>Seleccionar Equipo del Catálogo</strong></label>
+                    <select id="etq-equipo-select" onchange="autoFillEtiqueta(this.value)" style="width:100%; padding:8px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff;">
+                        ${equipoOptions}
+                    </select>
+                </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
                     <div class="form-group">
                         <label>Equipo</label>
@@ -1751,11 +1771,11 @@ async function verRequisicion(rid) {
                     </div>
                     <div class="form-group">
                         <label>Apertura</label>
-                        <input type="text" id="etq-apertura" placeholder="Ej: 3/8\"">
+                        <input type="text" id="etq-apertura" placeholder='Ej: 3/8"'>
                     </div>
                     <div class="form-group">
                         <label>Tamaño Alimentación</label>
-                        <input type="text" id="etq-tamano" placeholder="Ej: 4\"">
+                        <input type="text" id="etq-tamano" placeholder='Ej: 4"'>
                     </div>
                     <div class="form-group">
                         <label>Peso del Equipo</label>
@@ -1766,17 +1786,17 @@ async function verRequisicion(rid) {
                         <input type="date" id="etq-fecha-fab">
                     </div>
                     <div class="form-group">
-                        <label>Número de Serie</label>
-                        <input type="text" id="etq-serie" placeholder="Ej: SHT-D01-001">
+                        <label>Número de Serie <small style="color:#F47427;">(automático)</small></label>
+                        <input type="text" id="etq-serie" placeholder="Se genera automáticamente" readonly style="background:rgba(244,116,39,0.1); border-color:#F47427;">
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})">Descargar Etiqueta PNG</button>
+                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})" style="background:#D2152B;">&#128196; Generar PDF Etiqueta</button>
                     <div class="form-group" style="flex:1; margin:0;">
                         <label>Email destino</label>
                         <input type="email" id="etq-email" placeholder="correo@ejemplo.com" style="margin:0;">
                     </div>
-                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">Enviar Etiqueta</button>
+                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">&#9993; Enviar Etiqueta</button>
                 </div>
             </div>
         `;
@@ -2089,6 +2109,39 @@ async function deleteRequisicion(rid) {
 }
 
 // ==================== ETIQUETA DESDE REQUISICION ====================
+async function autoFillEtiqueta(equipoId) {
+    if (!equipoId) return;
+    try {
+        // Fetch full equipment details
+        const res = await fetch(`${API}/api/equipos/${equipoId}`);
+        const eq = await res.json();
+
+        // Auto-fill all fields
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+        setVal('etq-equipo', eq.nombre || '');
+        setVal('etq-modelo', eq.modelo || '');
+        setVal('etq-capacidad', eq.capacidad || '');
+        setVal('etq-potencia', eq.potencia_motor || '');
+        setVal('etq-apertura', eq.apertura || '');
+        setVal('etq-tamano', eq.tamano_alimentacion || '');
+        setVal('etq-peso', eq.peso || '');
+        if (eq.fecha_fabricacion) {
+            setVal('etq-fecha-fab', eq.fecha_fabricacion.substring(0, 10));
+        }
+
+        // Auto-generate serial number
+        const serialRes = await fetch(`${API}/api/equipos/${equipoId}/serial`);
+        const serialData = await serialRes.json();
+        if (serialData.serial) {
+            setVal('etq-serie', serialData.serial);
+        }
+
+        notify(`Datos del equipo "${eq.nombre}" cargados. Serie: ${serialData.serial || '-'}`, 'success');
+    } catch (e) {
+        notify('Error cargando equipo: ' + e.message, 'error');
+    }
+}
+
 function getEtiquetaData() {
     return {
         equipo: document.getElementById('etq-equipo')?.value || '',
@@ -2103,39 +2156,104 @@ function getEtiquetaData() {
     };
 }
 
-async function descargarEtiquetaReq(rid) {
-    try {
-        const data = getEtiquetaData();
-        if (!data.equipo) {
-            notify('Ingresa al menos el nombre del equipo', 'error');
-            return;
-        }
-
-        const res = await fetch(`${API}/api/requisiciones/${rid}/etiqueta`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        if (!res.ok) {
-            const err = await res.json();
-            notify(err.error || 'Error al generar etiqueta', 'error');
-            return;
-        }
-
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `etiqueta_${data.equipo.replace(/\s/g, '_')}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        notify('Etiqueta descargada', 'success');
-    } catch (e) {
-        notify('Error: ' + e.message, 'error');
+function descargarEtiquetaReq(rid) {
+    const d = getEtiquetaData();
+    if (!d.equipo) {
+        notify('Selecciona un equipo o ingresa el nombre', 'error');
+        return;
     }
+
+    const fechaFab = d.fecha_fabricacion ? new Date(d.fecha_fabricacion + 'T00:00:00').toLocaleDateString('es-MX') : '-';
+
+    const htmlContent = `
+        <html><head>
+        <title>Etiqueta ${d.equipo} - ${d.numero_serie || ''}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f0f0f0; }
+            .etiqueta {
+                width: 750px; background: #fff; border: 2px solid #000; border-radius: 12px;
+                padding: 30px; position: relative;
+            }
+            .etq-header {
+                display: flex; justify-content: space-between; align-items: flex-start;
+                margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #000;
+            }
+            .etq-logo h1 {
+                font-size: 2.5rem; font-weight: 800; color: #000; letter-spacing: 3px;
+                display: flex; align-items: center; gap: 12px;
+            }
+            .etq-logo-icon {
+                width: 48px; height: 48px; background: #000; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 1.5rem; color: #fff;
+            }
+            .etq-logo span { font-size: 0.9rem; font-weight: 500; color: #333; letter-spacing: 2px; display: block; margin-top: 2px; }
+            .etq-badges { text-align: right; font-size: 0.85rem; }
+            .etq-badge { display: flex; align-items: center; gap: 6px; justify-content: flex-end; margin-bottom: 4px; font-weight: 600; }
+            .etq-badge-icon { font-size: 1.2rem; }
+            .etq-grid {
+                display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+                margin-bottom: 20px;
+            }
+            .etq-field label {
+                font-size: 0.78rem; color: #555; font-style: italic; display: block; margin-bottom: 3px;
+            }
+            .etq-field .etq-value {
+                border: 1.5px solid #000; border-radius: 6px; padding: 6px 10px;
+                font-size: 0.9rem; font-weight: 600; min-height: 32px; background: #fff;
+            }
+            .etq-footer {
+                display: flex; justify-content: space-between; align-items: center;
+                padding-top: 15px; border-top: 1.5px solid #000;
+                font-size: 0.82rem; color: #333;
+            }
+            .etq-footer-item { display: flex; align-items: center; gap: 6px; }
+            .etq-footer-icon { font-size: 1.1rem; }
+            @media print {
+                body { background: #fff; min-height: auto; }
+                .etiqueta { border: 2px solid #000; box-shadow: none; }
+            }
+        </style>
+        </head><body>
+        <div class="etiqueta">
+            <div class="etq-header">
+                <div class="etq-logo">
+                    <h1><span class="etq-logo-icon">&#9650;</span> DURTRON</h1>
+                    <span>INNOVACI\u00d3N INDUSTRIAL</span>
+                </div>
+                <div class="etq-badges">
+                    <div class="etq-badge"><span class="etq-badge-icon">&#9989;</span> Calidad Industrial</div>
+                    <div class="etq-badge"><span class="etq-badge-icon">&#128205;</span> Durtron Planta 1 Durango</div>
+                </div>
+            </div>
+
+            <div class="etq-grid">
+                <div class="etq-field"><label>Equipo</label><div class="etq-value">${d.equipo}</div></div>
+                <div class="etq-field"><label>Apertura</label><div class="etq-value">${d.apertura || '-'}</div></div>
+                <div class="etq-field"><label>Peso del Equipo</label><div class="etq-value">${d.peso || '-'}</div></div>
+                <div class="etq-field"><label>Modelo</label><div class="etq-value">${d.modelo || '-'}</div></div>
+                <div class="etq-field"><label>Tama\u00f1o de Alimentaci\u00f3n</label><div class="etq-value">${d.tamano_alimentacion || '-'}</div></div>
+                <div class="etq-field"><label>Fecha de Fabricaci\u00f3n</label><div class="etq-value">${fechaFab}</div></div>
+                <div class="etq-field"><label>Capacidad</label><div class="etq-value">${d.capacidad || '-'}</div></div>
+                <div class="etq-field"><label>Potencia</label><div class="etq-value">${d.potencia || '-'}</div></div>
+                <div class="etq-field"><label>N\u00famero de Serie</label><div class="etq-value" style="color:#D2152B; font-weight:800;">${d.numero_serie || '-'}</div></div>
+            </div>
+
+            <div class="etq-footer">
+                <div class="etq-footer-item"><span class="etq-footer-icon">&#128222;</span> 6181341056</div>
+                <div class="etq-footer-item"><span class="etq-footer-icon">&#9993;</span> contacto@durtron.com</div>
+                <div class="etq-footer-item"><span class="etq-footer-icon">&#127760;</span> www.durtron.com</div>
+            </div>
+        </div>
+        <script>setTimeout(()=>{window.print();},600)<\/script>
+        </body></html>
+    `;
+
+    const win = window.open('', '_blank');
+    win.document.write(htmlContent);
+    win.document.close();
 }
 
 async function enviarEtiquetaEmail(rid) {
