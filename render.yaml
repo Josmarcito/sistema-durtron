@@ -3,7 +3,7 @@ services:
     name: sistema-durtron
     env: python
     buildCommand: pip install -r requirements.txt && python init_db.py
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2
     envVars:
       - key: DATABASE_URL
         value: postgresql://durtron:RBYwTg26IgSlKJN8giieAhUmylzpTzn6@dpg-d66b4d6sb7us73clsr7g-a/durtron

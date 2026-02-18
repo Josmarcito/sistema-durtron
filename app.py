@@ -11,6 +11,7 @@ import secrets
 import io
 import logging
 import traceback
+import threading
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__, static_folder='frontend')
@@ -1579,24 +1580,34 @@ Favor de confirmar recepción y tiempos de entrega.
 Saludos,
 DURTRON - Innovacion Industrial
 """
-        msg = MIMEMultipart()
-        msg['From'] = smtp_user
-        msg['To'] = dest_email
-        msg['Subject'] = f"Requisicion {req['folio']} - {prov_data['razon_social']} - DURTRON"
-        msg.attach(MIMEText(body, 'plain'))
+        subject = f"Requisicion {req['folio']} - {prov_data['razon_social']} - DURTRON"
 
-        print(f'[EMAIL] Connecting to {smtp_host}:{smtp_port} as {smtp_user}...')
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
-        print(f'[EMAIL] Sent to {dest_email} OK')
+        # Send email in background thread to avoid Gunicorn worker timeout
+        def _send_email_bg():
+            try:
+                msg = MIMEMultipart()
+                msg['From'] = smtp_user
+                msg['To'] = dest_email
+                msg['Subject'] = subject
+                msg.attach(MIMEText(body, 'plain'))
 
-        return jsonify({'success': True, 'message': f'Email enviado a {dest_email}'})
+                print(f'[EMAIL] Connecting to {smtp_host}:{smtp_port} as {smtp_user}...')
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+                server.quit()
+                print(f'[EMAIL] ✓ Sent to {dest_email} OK')
+            except Exception as e:
+                print(f'[EMAIL ERROR] {e}')
+                traceback.print_exc()
+
+        t = threading.Thread(target=_send_email_bg, daemon=True)
+        t.start()
+
+        return jsonify({'success': True, 'message': f'Email en proceso de envío a {dest_email}'})
     except Exception as e:
         print(f'[EMAIL ERROR] {e}')
-        import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
@@ -1836,12 +1847,8 @@ def enviar_etiqueta_email(rid):
         img.save(buf, format='PNG')
         img_bytes = buf.getvalue()
 
-        # Send email with attachment
-        msg = MIMEMultipart()
-        msg['From'] = smtp_user
-        msg['To'] = dest_email
-        msg['Subject'] = f"Etiqueta de Equipo - {equipo} - DURTRON"
-
+        # Send email in background thread to avoid Gunicorn timeout
+        subject = f"Etiqueta de Equipo - {equipo} - DURTRON"
         body_text = f"""Adjuntamos la etiqueta de identificación del equipo:
 
 Equipo: {equipo}
@@ -1851,21 +1858,37 @@ Saludos,
 DURTRON - Innovacion Industrial
 Tel: 618 134 1056
 """
-        msg.attach(MIMEText(body_text, 'plain'))
 
-        img_attachment = MIMEImage(img_bytes, name=f'etiqueta_{equipo.replace(" ", "_")}.png')
-        img_attachment.add_header('Content-Disposition', 'attachment', filename=f'etiqueta_{equipo.replace(" ", "_")}.png')
-        msg.attach(img_attachment)
+        def _send_etiqueta_bg():
+            try:
+                msg = MIMEMultipart()
+                msg['From'] = smtp_user
+                msg['To'] = dest_email
+                msg['Subject'] = subject
+                msg.attach(MIMEText(body_text, 'plain'))
 
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
+                img_attachment = MIMEImage(img_bytes, name=f'etiqueta_{equipo.replace(" ", "_")}.png')
+                img_attachment.add_header('Content-Disposition', 'attachment', filename=f'etiqueta_{equipo.replace(" ", "_")}.png')
+                msg.attach(img_attachment)
 
-        return jsonify({'success': True, 'message': f'Etiqueta enviada a {dest_email}'})
+                print(f'[EMAIL-ETQ] Connecting to {smtp_host}:{smtp_port} as {smtp_user}...')
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+                server.quit()
+                print(f'[EMAIL-ETQ] ✓ Etiqueta sent to {dest_email} OK')
+            except Exception as e:
+                print(f'[EMAIL-ETQ ERROR] {e}')
+                traceback.print_exc()
+
+        t = threading.Thread(target=_send_etiqueta_bg, daemon=True)
+        t.start()
+
+        return jsonify({'success': True, 'message': f'Etiqueta en proceso de envío a {dest_email}'})
     except Exception as e:
-        print(f'Error enviando etiqueta: {e}')
+        print(f'[EMAIL-ETQ ERROR] {e}')
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
