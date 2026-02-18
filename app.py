@@ -487,6 +487,42 @@ def update_equipo(eid):
         print(f'Error actualizando equipo: {e}')
         return jsonify({'error': str(e)}), 500
 
+# ==================== SERIAL NUMBER GENERATION ====================
+@app.route('/api/equipos/<int:eid>/serial', methods=['GET'])
+def get_next_serial(eid):
+    """Generates next sequential serial number for an equipment based on its code."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Get equipo code
+        cur.execute('SELECT codigo FROM equipos WHERE id=%s', (eid,))
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Equipo no encontrado'}), 404
+
+        equipo_codigo = row['codigo']
+
+        # Atomic increment: INSERT or UPDATE the counter
+        cur.execute('''
+            INSERT INTO serial_counters (equipo_codigo, last_serial)
+            VALUES (%s, 1)
+            ON CONFLICT (equipo_codigo)
+            DO UPDATE SET last_serial = serial_counters.last_serial + 1
+            RETURNING last_serial
+        ''', (equipo_codigo,))
+        new_serial = cur.fetchone()['last_serial']
+        conn.commit()
+
+        serial_str = f"{equipo_codigo}-{new_serial:03d}"
+        cur.close()
+        conn.close()
+        return jsonify({'serial': serial_str, 'counter': new_serial})
+    except Exception as e:
+        print(f'Error generating serial: {e}')
+        return jsonify({'error': str(e)}), 500
+
 # ==================== PARTES TECNICAS POR EQUIPO ====================
 @app.route('/api/equipos/<int:eid>/partes')
 def get_equipo_partes(eid):

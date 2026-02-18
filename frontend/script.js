@@ -2129,14 +2129,24 @@ async function autoFillEtiqueta(equipoId) {
             setVal('etq-fecha-fab', eq.fecha_fabricacion.substring(0, 10));
         }
 
-        // Auto-generate serial number
-        const serialRes = await fetch(`${API}/api/equipos/${equipoId}/serial`);
-        const serialData = await serialRes.json();
-        if (serialData.serial) {
-            setVal('etq-serie', serialData.serial);
+        // Auto-generate serial number (separate try/catch so equipo data still shows)
+        let serialStr = '-';
+        try {
+            const serialRes = await fetch(`${API}/api/equipos/${equipoId}/serial`);
+            if (serialRes.ok) {
+                const serialData = await serialRes.json();
+                if (serialData.serial) {
+                    setVal('etq-serie', serialData.serial);
+                    serialStr = serialData.serial;
+                }
+            } else {
+                console.warn('Serial endpoint returned', serialRes.status);
+            }
+        } catch (serialErr) {
+            console.warn('Error generando serial:', serialErr.message);
         }
 
-        notify(`Datos del equipo "${eq.nombre}" cargados. Serie: ${serialData.serial || '-'}`, 'success');
+        notify(`Datos del equipo "${eq.nombre}" cargados. Serie: ${serialStr}`, 'success');
     } catch (e) {
         notify('Error cargando equipo: ' + e.message, 'error');
     }
@@ -2184,12 +2194,9 @@ function descargarEtiquetaReq(rid) {
                 font-size: 2.5rem; font-weight: 800; color: #000; letter-spacing: 3px;
                 display: flex; align-items: center; gap: 12px;
             }
-            .etq-logo-icon {
-                width: 48px; height: 48px; background: #000; border-radius: 50%;
-                display: flex; align-items: center; justify-content: center;
-                font-size: 1.5rem; color: #fff;
+            .etq-logo img {
+                height: 70px; width: auto;
             }
-            .etq-logo span { font-size: 0.9rem; font-weight: 500; color: #333; letter-spacing: 2px; display: block; margin-top: 2px; }
             .etq-badges { text-align: right; font-size: 0.85rem; }
             .etq-badge { display: flex; align-items: center; gap: 6px; justify-content: flex-end; margin-bottom: 4px; font-weight: 600; }
             .etq-badge-icon { font-size: 1.2rem; }
@@ -2220,8 +2227,7 @@ function descargarEtiquetaReq(rid) {
         <div class="etiqueta">
             <div class="etq-header">
                 <div class="etq-logo">
-                    <h1><span class="etq-logo-icon">&#9650;</span> DURTRON</h1>
-                    <span>INNOVACI\u00d3N INDUSTRIAL</span>
+                    <img src="${typeof DURTRON_LOGO_B64 !== 'undefined' ? DURTRON_LOGO_B64 : ''}" alt="DURTRON">
                 </div>
                 <div class="etq-badges">
                     <div class="etq-badge"><span class="etq-badge-icon">&#9989;</span> Calidad Industrial</div>
