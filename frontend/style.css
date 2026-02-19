@@ -179,6 +179,7 @@ body {
     margin-left: var(--sidebar-width);
     flex: 1;
     min-height: 100vh;
+    padding: 0;
 }
 
 .topbar {
@@ -235,6 +236,7 @@ body {
 
 .section.active {
     display: block;
+    padding: 1.5rem 2rem;
 }
 
 .section h2 {
@@ -1074,6 +1076,10 @@ textarea {
     }
 
     .container {
+        padding: 1rem;
+    }
+
+    .section.active {
         padding: 1rem;
     }
 
