@@ -339,6 +339,21 @@ def get_dashboard():
                 t[k] = round(t[k], 2)
             trimestres.append(t)
 
+        # Top equipos más vendidos
+        cur.execute('''
+            SELECT e.nombre, e.codigo, COUNT(v.id) as total_vendidos,
+                   COALESCE(SUM(v.precio_venta),0) as ingreso_total
+            FROM ventas v
+            JOIN equipos e ON v.equipo_id = e.id
+            WHERE EXTRACT(YEAR FROM v.fecha_venta)=%s
+            GROUP BY e.nombre, e.codigo
+            ORDER BY total_vendidos DESC, ingreso_total DESC
+            LIMIT 10
+        ''', (year,))
+        top_equipos = [dict(r) for r in cur.fetchall()]
+        for t in top_equipos:
+            t['ingreso_total'] = float(t['ingreso_total'])
+
         cur.close()
         conn.close()
 
@@ -354,6 +369,7 @@ def get_dashboard():
             'saldo_pendiente_anio': ventas_anio_saldo,
             'mensual': meses_data,
             'trimestral': trimestres,
+            'top_equipos': top_equipos,
             'year': year
         })
     except Exception as e:

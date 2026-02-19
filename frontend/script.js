@@ -129,6 +129,8 @@ async function loadDashboard() {
         document.getElementById('stat-total-ventas').textContent = d.ventas_anio || 0;
 
         renderPieChart(d);
+        renderTopEquiposChart(d);
+        renderTopEquiposTable(d);
         renderPeriodo();
     } catch (e) {
         console.error('Error dashboard:', e);
@@ -201,6 +203,118 @@ function renderPieChart(d) {
             cutout: '55%'
         }
     });
+}
+
+let topEquiposChart = null;
+
+function renderTopEquiposChart(d) {
+    const ctx = document.getElementById('chart-top-equipos');
+    if (!ctx) return;
+
+    if (topEquiposChart) {
+        topEquiposChart.destroy();
+    }
+
+    const equipos = (d.top_equipos || []);
+    if (equipos.length === 0) {
+        ctx.parentElement.innerHTML = '<p style="text-align:center; color:#888; padding:2rem;">No hay ventas registradas aún</p>';
+        return;
+    }
+
+    const labels = equipos.map(e => e.nombre.length > 20 ? e.nombre.substring(0, 18) + '...' : e.nombre);
+    const dataVentas = equipos.map(e => e.total_vendidos);
+    const dataIngresos = equipos.map(e => e.ingreso_total);
+
+    const colors = [
+        'rgba(210, 21, 43, 0.85)',
+        'rgba(244, 116, 39, 0.85)',
+        'rgba(52, 152, 219, 0.85)',
+        'rgba(46, 204, 113, 0.85)',
+        'rgba(155, 89, 182, 0.85)',
+        'rgba(241, 196, 15, 0.85)',
+        'rgba(26, 188, 156, 0.85)',
+        'rgba(231, 76, 60, 0.85)',
+        'rgba(142, 68, 173, 0.85)',
+        'rgba(230, 126, 34, 0.85)'
+    ];
+
+    topEquiposChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Unidades Vendidas',
+                data: dataVentas,
+                backgroundColor: colors.slice(0, equipos.length),
+                borderColor: colors.slice(0, equipos.length).map(c => c.replace('0.85', '1')),
+                borderWidth: 2,
+                borderRadius: 6,
+                barPercentage: 0.7
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        afterLabel: function (context) {
+                            const idx = context.dataIndex;
+                            return 'Ingreso: ' + money(dataIngresos[idx]);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        color: 'rgba(255,255,255,0.6)',
+                        font: { family: 'Inter' }
+                    },
+                    grid: { color: 'rgba(255,255,255,0.06)' },
+                    title: {
+                        display: true,
+                        text: 'Unidades vendidas',
+                        color: 'rgba(255,255,255,0.5)',
+                        font: { family: 'Inter', size: 11 }
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: 'rgba(255,255,255,0.8)',
+                        font: { family: 'Inter', size: 12 }
+                    },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+
+function renderTopEquiposTable(d) {
+    const tbody = document.getElementById('top-equipos-tbody');
+    if (!tbody) return;
+
+    const equipos = (d.top_equipos || []);
+    if (equipos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">No hay ventas registradas</td></tr>';
+        return;
+    }
+
+    const medals = ['🥇', '🥈', '🥉'];
+    tbody.innerHTML = equipos.map((e, i) => `
+        <tr>
+            <td style="text-align:center; font-size:1.1rem;">${medals[i] || (i + 1)}</td>
+            <td><strong>${e.nombre}</strong></td>
+            <td style="color:#F47427;">${e.codigo}</td>
+            <td style="text-align:center;"><span style="background:rgba(210,21,43,0.2); color:#D2152B; padding:3px 12px; border-radius:12px; font-weight:700;">${e.total_vendidos}</span></td>
+            <td style="text-align:right; font-weight:600;">${money(e.ingreso_total)}</td>
+        </tr>
+    `).join('');
 }
 
 function showPeriodo(tipo) {
