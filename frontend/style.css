@@ -1087,6 +1087,10 @@ textarea {
         grid-template-columns: repeat(2, 1fr);
     }
 
+    .dashboard-charts {
+        grid-template-columns: 1fr;
+    }
+
     .form-grid {
         grid-template-columns: 1fr;
     }

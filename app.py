@@ -1660,7 +1660,7 @@ DURTRON - Innovacion Industrial
                 print(f'[EMAIL] Sending via Resend API to {dest_email}...')
                 resp = urllib.request.urlopen(rq, timeout=15)
                 result = json.loads(resp.read())
-                print(f'[EMAIL] ✓ Sent OK - id: {result.get("id")}')
+                print(f'[EMAIL] Sent OK - id: {result.get("id")}')
             except urllib.request.HTTPError as he:
                 err_body = he.read().decode('utf-8', errors='replace')
                 print(f'[EMAIL ERROR] HTTP {he.code}: {err_body}')
@@ -1941,7 +1941,7 @@ Tel: 618 134 1056
                 print(f'[EMAIL-ETQ] Sending via Resend API to {dest_email}...')
                 resp = urllib.request.urlopen(rq, timeout=15)
                 result = json.loads(resp.read())
-                print(f'[EMAIL-ETQ] ✓ Sent OK - id: {result.get("id")}')
+                print(f'[EMAIL-ETQ] Sent OK - id: {result.get("id")}')
             except urllib.request.HTTPError as he:
                 err_body = he.read().decode('utf-8', errors='replace')
                 print(f'[EMAIL-ETQ ERROR] HTTP {he.code}: {err_body}')

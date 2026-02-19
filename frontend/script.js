@@ -305,7 +305,7 @@ function renderTopEquiposTable(d) {
         return;
     }
 
-    const medals = ['🥇', '🥈', '🥉'];
+    const medals = ['1.', '2.', '3.'];
     tbody.innerHTML = equipos.map((e, i) => `
         <tr>
             <td style="text-align:center; font-size:1.1rem;">${medals[i] || (i + 1)}</td>
@@ -852,9 +852,9 @@ async function loadVendedores() {
         }
         tbody.innerHTML = data.map(v => {
             let medal = '';
-            if (v.posicion === 1) medal = '<span class="medal">&#129351;</span> ';
-            else if (v.posicion === 2) medal = '<span class="medal">&#129352;</span> ';
-            else if (v.posicion === 3) medal = '<span class="medal">&#129353;</span> ';
+            if (v.posicion === 1) medal = '<span class="medal" style="color:#FFD700;">1o</span> ';
+            else if (v.posicion === 2) medal = '<span class="medal" style="color:#C0C0C0;">2o</span> ';
+            else if (v.posicion === 3) medal = '<span class="medal" style="color:#CD7F32;">3o</span> ';
             return `<tr>
                 <td><strong>${v.posicion}</strong></td>
                 <td>${medal}${v.vendedor}</td>
@@ -1570,7 +1570,7 @@ function renderRequisiciones() {
             <td>${fecha}</td>
             <td class="action-buttons">
                 <button class="btn btn-primary btn-sm" onclick="verRequisicion(${r.id})">Ver / Gestionar</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteRequisicion(${r.id})">&#10006;</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteRequisicion(${r.id})">Eliminar</button>
             </td>
         </tr>`;
     }).join('');
@@ -1598,7 +1598,7 @@ function addReqItem() {
         <div style="text-align:center"><input type="checkbox" class="req-iva" onchange="updateReqRowTotal(this)"></div>
         <input type="text" class="req-subtotal" readonly value="$0.00" style="background:#eee; color:#333; text-align:right;">
         <input type="text" class="req-total" readonly value="$0.00" style="background:#eee; color:#333; font-weight:bold; text-align:right;">
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); updateReqGrandTotal()">&#10006;</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); updateReqGrandTotal()">X</button>
     `;
     container.appendChild(row);
     // Inherit Main Provider if selected
@@ -1837,9 +1837,9 @@ async function verRequisicion(rid) {
                 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px; margin-bottom:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
                     <span><strong>${pName}</strong> (${itemsByProv[pName].length} partidas - $${provTotal.toFixed(2)})</span>
                     <div style="gap:5px; display:flex;">
-                         <button class="btn btn-sm" style="background:#D2152B;color:#fff;" onclick="imprimirReqProveedor(${r.id}, '${pName.replace(/'/g, "\\'")}')" title="Generar PDF">&#128196; PDF</button>
-                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName.replace(/'/g, "\\'")}', '${eqName}')">&#128172; WhatsApp</button>
-                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName.replace(/'/g, "\\'")}')">&#9993; Email</button>
+                         <button class="btn btn-sm" style="background:#D2152B;color:#fff;" onclick="imprimirReqProveedor(${r.id}, '${pName.replace(/'/g, "\\'")}')" title="Generar PDF">PDF</button>
+                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName.replace(/'/g, "\\'")}', '${eqName}')">WhatsApp</button>
+                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName.replace(/'/g, "\\'")}')">Email</button>
                     </div>
                 </div>
             `;
@@ -1858,7 +1858,7 @@ async function verRequisicion(rid) {
 
         const etiquetaHtml = `
             <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; margin-top:15px; border:1px solid rgba(255,255,255,0.1);">
-                <h4>&#127991; Generar Etiqueta de Equipo</h4>
+                <h4>Generar Etiqueta de Equipo</h4>
                 <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Selecciona un equipo del catálogo para llenar automáticamente. El número de serie se genera automáticamente.</p>
                 <div class="form-group" style="margin-bottom:12px;">
                     <label><strong>Seleccionar Equipo del Catálogo</strong></label>
@@ -1903,24 +1903,24 @@ async function verRequisicion(rid) {
                         <label>Número de Serie <small style="color:#F47427;">(automático)</small></label>
                         <div style="display:flex; gap:5px; align-items:center;">
                             <input type="text" id="etq-serie" placeholder="Se genera automáticamente" readonly style="background:rgba(244,116,39,0.1); border-color:#F47427; flex:1;">
-                            <button class="btn" onclick="resetLastSerial()" style="background:#D2152B; color:#fff; padding:6px 10px; font-size:0.75rem; white-space:nowrap;" title="Eliminar último serial generado">&#128465; Quitar</button>
+                            <button class="btn" onclick="resetLastSerial()" style="background:#D2152B; color:#fff; padding:6px 10px; font-size:0.75rem; white-space:nowrap;" title="Eliminar ultimo serial generado">Quitar</button>
                         </div>
                     </div>
                 </div>
                 <div style="margin-top:10px; padding:10px; background:rgba(244,116,39,0.05); border-radius:6px; border:1px solid rgba(244,116,39,0.2);">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <small style="color:#F47427;">💡 Si generaste seriales de prueba, usa el botón "Quitar" para decrementar el contador, o haz clic en "Administrar" para ver/resetear todos los contadores.</small>
-                        <button class="btn" onclick="mostrarAdminSeriales()" style="background:rgba(244,116,39,0.2); color:#F47427; padding:5px 12px; font-size:0.75rem; white-space:nowrap;">⚙ Administrar</button>
+                        <small style="color:#F47427;">Si generaste seriales de prueba, usa el boton "Quitar" para decrementar el contador, o haz clic en "Administrar" para ver/resetear todos los contadores.</small>
+                        <button class="btn" onclick="mostrarAdminSeriales()" style="background:rgba(244,116,39,0.2); color:#F47427; padding:5px 12px; font-size:0.75rem; white-space:nowrap;">Administrar</button>
                     </div>
                     <div id="admin-seriales-panel" style="display:none; margin-top:10px;"></div>
                 </div>
                 <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})" style="background:#D2152B;">&#128196; Generar PDF Etiqueta</button>
+                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})" style="background:#D2152B;">Generar PDF Etiqueta</button>
                     <div class="form-group" style="flex:1; margin:0;">
                         <label>Email destino</label>
                         <input type="email" id="etq-email" placeholder="correo@ejemplo.com" style="margin:0;">
                     </div>
-                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">&#9993; Enviar Etiqueta</button>
+                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">Enviar Etiqueta</button>
                 </div>
             </div>
         `;
@@ -2435,8 +2435,8 @@ function descargarEtiquetaReq(rid) {
                     <img src="${typeof DURTRON_LOGO_B64 !== 'undefined' ? DURTRON_LOGO_B64 : ''}" alt="DURTRON">
                 </div>
                 <div class="etq-badges">
-                    <div class="etq-badge"><span class="etq-badge-icon">&#9989;</span> Calidad Industrial</div>
-                    <div class="etq-badge"><span class="etq-badge-icon">&#128205;</span> Durtron Planta 1 Durango</div>
+                    <div class="etq-badge"><span class="etq-badge-icon">*</span> Calidad Industrial</div>
+                    <div class="etq-badge"><span class="etq-badge-icon">*</span> Durtron Planta 1 Durango</div>
                 </div>
             </div>
 
@@ -2453,9 +2453,9 @@ function descargarEtiquetaReq(rid) {
             </div>
 
             <div class="etq-footer">
-                <div class="etq-footer-item"><span class="etq-footer-icon">&#128222;</span> 6181341056</div>
-                <div class="etq-footer-item"><span class="etq-footer-icon">&#9993;</span> contacto@durtron.com</div>
-                <div class="etq-footer-item"><span class="etq-footer-icon">&#127760;</span> www.durtron.com</div>
+                <div class="etq-footer-item"><span class="etq-footer-icon">Tel:</span> 6181341056</div>
+                <div class="etq-footer-item"><span class="etq-footer-icon">Email:</span> contacto@durtron.com</div>
+                <div class="etq-footer-item"><span class="etq-footer-icon">Web:</span> www.durtron.com</div>
             </div>
         </div>
         <script>setTimeout(()=>{window.print();},600)<\/script>
