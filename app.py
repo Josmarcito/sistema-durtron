@@ -524,6 +524,60 @@ def get_next_serial(eid):
         print(f'Error generating serial: {e}')
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/equipos/<int:eid>/serial', methods=['DELETE'])
+def reset_serial(eid):
+    """Decrements serial counter by 1 (undo last serial) or resets to a specific value."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT codigo FROM equipos WHERE id=%s', (eid,))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return jsonify({'error': 'Equipo no encontrado'}), 404
+
+        equipo_codigo = row['codigo']
+        target = request.args.get('target')  # optional: reset to a specific number
+
+        if target is not None:
+            target_val = max(0, int(target))
+            cur.execute('UPDATE serial_counters SET last_serial=%s WHERE equipo_codigo=%s RETURNING last_serial',
+                        (target_val, equipo_codigo))
+        else:
+            # Decrement by 1, min 0
+            cur.execute('''
+                UPDATE serial_counters SET last_serial = GREATEST(last_serial - 1, 0)
+                WHERE equipo_codigo=%s RETURNING last_serial
+            ''', (equipo_codigo,))
+
+        result = cur.fetchone()
+        new_val = result['last_serial'] if result else 0
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({'success': True, 'counter': new_val, 'equipo_codigo': equipo_codigo})
+    except Exception as e:
+        print(f'Error resetting serial: {e}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/serial-counters', methods=['GET'])
+def list_serial_counters():
+    """Lists all serial counters for management."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT sc.equipo_codigo, sc.last_serial, e.nombre, e.id as equipo_id
+            FROM serial_counters sc
+            LEFT JOIN equipos e ON e.codigo = sc.equipo_codigo
+            ORDER BY sc.equipo_codigo
+        ''')
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        print(f'Error listing serial counters: {e}')
+        return jsonify({'error': str(e)}), 500
+
 # ==================== PARTES TECNICAS POR EQUIPO ====================
 @app.route('/api/equipos/<int:eid>/partes')
 def get_equipo_partes(eid):

@@ -1787,8 +1787,18 @@ async function verRequisicion(rid) {
                     </div>
                     <div class="form-group">
                         <label>Número de Serie <small style="color:#F47427;">(automático)</small></label>
-                        <input type="text" id="etq-serie" placeholder="Se genera automáticamente" readonly style="background:rgba(244,116,39,0.1); border-color:#F47427;">
+                        <div style="display:flex; gap:5px; align-items:center;">
+                            <input type="text" id="etq-serie" placeholder="Se genera automáticamente" readonly style="background:rgba(244,116,39,0.1); border-color:#F47427; flex:1;">
+                            <button class="btn" onclick="resetLastSerial()" style="background:#D2152B; color:#fff; padding:6px 10px; font-size:0.75rem; white-space:nowrap;" title="Eliminar último serial generado">&#128465; Quitar</button>
+                        </div>
                     </div>
+                </div>
+                <div style="margin-top:10px; padding:10px; background:rgba(244,116,39,0.05); border-radius:6px; border:1px solid rgba(244,116,39,0.2);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <small style="color:#F47427;">💡 Si generaste seriales de prueba, usa el botón "Quitar" para decrementar el contador, o haz clic en "Administrar" para ver/resetear todos los contadores.</small>
+                        <button class="btn" onclick="mostrarAdminSeriales()" style="background:rgba(244,116,39,0.2); color:#F47427; padding:5px 12px; font-size:0.75rem; white-space:nowrap;">⚙ Administrar</button>
+                    </div>
+                    <div id="admin-seriales-panel" style="display:none; margin-top:10px;"></div>
                 </div>
                 <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
                     <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})" style="background:#D2152B;">&#128196; Generar PDF Etiqueta</button>
@@ -1903,24 +1913,16 @@ async function imprimirReqProveedor(rid, provName) {
         let totalGen = 0;
 
         const itemsHtml = provItems.map((it, i) => {
-            const cant = parseFloat(it.cantidad) || 0;
-            const precio = parseFloat(it.precio_unitario) || 0;
-            const sub = cant * precio;
-            const iva = it.tiene_iva ? sub * 0.16 : 0;
-            const total = sub + iva;
-            subtotalGen += sub;
-            ivaGen += iva;
-            totalGen += total;
             return `
                 <tr>
                     <td style="text-align:center">${i + 1}</td>
                     <td>${it.componente || ''}</td>
                     <td><small>${it.comentario || ''}</small></td>
-                    <td style="text-align:center">${cant}</td>
+                    <td style="text-align:center">${parseFloat(it.cantidad) || 0}</td>
                     <td style="text-align:center">${it.unidad || 'pza'}</td>
-                    <td style="text-align:right">$${precio.toFixed(2)}</td>
-                    <td style="text-align:center">${it.tiene_iva ? 'Sí' : 'No'}</td>
-                    <td style="text-align:right"><strong>$${total.toFixed(2)}</strong></td>
+                    <td style="text-align:right"></td>
+                    <td style="text-align:center"></td>
+                    <td style="text-align:right"></td>
                 </tr>
             `;
         }).join('');
@@ -2016,16 +2018,11 @@ async function imprimirReqProveedor(rid, provName) {
                 <div class="req-pdf-totals">
                     <div class="req-total-row">
                         <span>Subtotal:</span>
-                        <strong>$${subtotalGen.toFixed(2)}</strong>
+                        <strong></strong>
                     </div>
-                    ${ivaGen > 0 ? `
-                    <div class="req-total-row">
-                        <span>IVA (16%):</span>
-                        <strong>$${ivaGen.toFixed(2)}</strong>
-                    </div>` : ''}
                     <div class="req-total-row req-total-final">
                         <span>TOTAL:</span>
-                        <strong>$${totalGen.toFixed(2)}</strong>
+                        <strong></strong>
                     </div>
                 </div>
 
@@ -2164,6 +2161,100 @@ function getEtiquetaData() {
         fecha_fabricacion: document.getElementById('etq-fecha-fab')?.value || '',
         numero_serie: document.getElementById('etq-serie')?.value || ''
     };
+}
+
+// Serial number management functions
+async function resetLastSerial() {
+    const select = document.getElementById('etq-equipo-select');
+    if (!select || !select.value) {
+        notify('Primero selecciona un equipo del catálogo', 'error');
+        return;
+    }
+    if (!confirm('¿Quitar el último número de serie generado para este equipo? El contador se decrementará en 1.')) return;
+
+    try {
+        const res = await fetch(`${API}/api/equipos/${select.value}/serial`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            const newSerial = data.counter > 0 ? `${data.equipo_codigo}-${String(data.counter).padStart(3, '0')}` : '(sin seriales)';
+            document.getElementById('etq-serie').value = data.counter > 0 ? newSerial : '';
+            notify(`Serial decrementado. Contador actual: ${data.counter} (${data.equipo_codigo})`, 'success');
+        } else {
+            notify(data.error || 'Error al resetear serial', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function mostrarAdminSeriales() {
+    const panel = document.getElementById('admin-seriales-panel');
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.innerHTML = '<p style="color:#888;">Cargando contadores...</p>';
+    panel.style.display = 'block';
+
+    try {
+        const res = await fetch(`${API}/api/serial-counters`);
+        const counters = await res.json();
+
+        if (!counters.length) {
+            panel.innerHTML = '<p style="color:#888;">No hay contadores de serie registrados.</p>';
+            return;
+        }
+
+        let html = '<table style="width:100%; font-size:0.85rem; border-collapse:collapse;">';
+        html += '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.15);">';
+        html += '<th style="text-align:left; padding:6px;">Equipo</th>';
+        html += '<th style="text-align:left; padding:6px;">Código</th>';
+        html += '<th style="text-align:center; padding:6px;">Último #</th>';
+        html += '<th style="text-align:center; padding:6px;">Resetear a</th>';
+        html += '<th style="text-align:center; padding:6px;">Acción</th>';
+        html += '</tr></thead><tbody>';
+
+        counters.forEach(c => {
+            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">`;
+            html += `<td style="padding:6px;">${c.nombre || '-'}</td>`;
+            html += `<td style="padding:6px; color:#F47427;">${c.equipo_codigo}</td>`;
+            html += `<td style="text-align:center; padding:6px; font-weight:bold;">${c.last_serial}</td>`;
+            html += `<td style="text-align:center; padding:6px;">
+                <input type="number" id="serial-reset-${c.equipo_id}" value="0" min="0" max="${c.last_serial}" style="width:60px; padding:3px; border-radius:3px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff; text-align:center;">
+            </td>`;
+            html += `<td style="text-align:center; padding:6px;">
+                <button class="btn" onclick="resetSerialTo(${c.equipo_id}, '${c.equipo_codigo}')" style="background:#D2152B; color:#fff; padding:3px 10px; font-size:0.75rem;">Resetear</button>
+            </td>`;
+            html += `</tr>`;
+        });
+
+        html += '</tbody></table>';
+        panel.innerHTML = html;
+    } catch (e) {
+        panel.innerHTML = `<p style="color:#ff4444;">Error: ${e.message}</p>`;
+    }
+}
+
+async function resetSerialTo(equipoId, equipoCodigo) {
+    const input = document.getElementById(`serial-reset-${equipoId}`);
+    const targetVal = parseInt(input?.value || '0');
+    if (!confirm(`¿Resetear el contador de "${equipoCodigo}" a ${targetVal}? Los seriales del ${targetVal + 1} en adelante se considerarán eliminados.`)) return;
+
+    try {
+        const res = await fetch(`${API}/api/equipos/${equipoId}/serial?target=${targetVal}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            notify(`Contador de ${equipoCodigo} reseteado a ${data.counter}`, 'success');
+            mostrarAdminSeriales(); // Refresh panel
+        } else {
+            notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
 }
 
 function descargarEtiquetaReq(rid) {
