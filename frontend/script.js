@@ -1541,10 +1541,6 @@ async function verCotizacion(id) {
                             La fabricacion del equipo dara inicio <u>unicamente</u> una vez recibido el <strong>anticipo completo equivalente al 60% (sesenta por ciento) del costo total del pedido</strong>, sin excepcion alguna. El tiempo de entrega establecido se contara a partir de la fecha de confirmacion de recepcion del anticipo. Cualquier retraso en el pago del anticipo por parte del cliente modificara el plazo de fabricacion y la fecha estimada de entrega, sin que ello de lugar a cancelaciones ni devoluciones de anticipos.</li>
                         </ol>
                     </div>
-
-                    <div class="cot-pdf-footer">
-                        <p>DURTRON - Innovacion Industrial | Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
-                    </div>
                 </div>
             </div>
         `;
@@ -1564,8 +1560,9 @@ function imprimirCotizacion() {
         <title>Cotizacion DURTRON</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: 'Inter', sans-serif; padding: 0; color: #333; }
+            @page { margin: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+            body { font-family: 'Inter', sans-serif; padding: 0; color: #333; margin: 0; }
             .cot-pdf { margin: 0; padding: 0; }
 
             /* Cover page */
@@ -1603,12 +1600,11 @@ function imprimirCotizacion() {
             .cot-pdf-terminos h4 { color: #333; font-size: 0.72rem; font-weight: 800; text-align: center; margin-bottom: 0.5rem; }
             .cot-pdf-terminos ol { padding-left: 1rem; }
             .cot-pdf-terminos li { margin-bottom: 0.25rem; }
-            .cot-pdf-footer { text-align: center; font-size: 0.65rem; color: #888; padding-top: 0.5rem; border-top: 1px solid #eee; }
 
             @media print {
                 body { padding: 0; margin: 0; }
                 .cot-cover { height: 100vh; page-break-after: always; }
-                .cot-page-content { padding: 1rem 1.5rem; }
+                .cot-page-content { padding: 0.8rem 1.5rem; }
             }
         </style>
         </head><body>
