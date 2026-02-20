@@ -1225,6 +1225,8 @@ function onEquipoSelect(selectEl) {
     if (eq) {
         row.querySelector('.cot-precio').value = eq.precio_lista || 0;
         row.querySelector('.cot-desc').value = `${eq.nombre}${eq.marca ? ' - ' + eq.marca : ''}${eq.modelo ? ' ' + eq.modelo : ''}`;
+        // Store modelo in a hidden data attr
+        row.dataset.modelo = eq.modelo || eq.codigo || '';
     }
 }
 
@@ -1247,13 +1249,56 @@ function addCotItem() {
     populateCotEquipoSelects();
 }
 
+function addCustomCotItem() {
+    const container = document.getElementById('cot-items-container');
+    const idx = container.children.length;
+    const div = document.createElement('div');
+    div.className = 'cot-item-row';
+    div.dataset.index = idx;
+    div.dataset.custom = 'true';
+    div.innerHTML = `
+        <input type="text" class="cot-desc" placeholder="Descripcion del servicio o producto" style="flex:2; border-color:#F47427;">
+        <input type="text" class="cot-modelo-custom" placeholder="Modelo (opcional)" style="width:120px; border-color:#F47427;">
+        <input type="number" class="cot-cantidad" value="1" min="1" placeholder="Cant" style="width:70px">
+        <input type="number" class="cot-precio" step="0.01" min="0" placeholder="Precio unitario" style="width:150px">
+        <button type="button" class="btn btn-sm btn-danger" onclick="removeCotItem(this)">X</button>
+    `;
+    container.appendChild(div);
+}
+
 function removeCotItem(btn) {
     const container = document.getElementById('cot-items-container');
     if (container.children.length <= 1) {
-        notify('Debe haber al menos un equipo', 'error');
+        notify('Debe haber al menos un elemento', 'error');
         return;
     }
     btn.closest('.cot-item-row').remove();
+}
+
+function toggleDescuento() {
+    const sel = document.getElementById('cot-descuento');
+    const customGrp = document.getElementById('cot-descuento-custom-group');
+    customGrp.style.display = sel.value === 'custom' ? '' : 'none';
+}
+
+function toggleAnticipo() {
+    const sel = document.getElementById('cot-anticipo');
+    const customGrp = document.getElementById('cot-anticipo-custom-group');
+    customGrp.style.display = sel.value === 'custom' ? '' : 'none';
+}
+
+function getDescuentoPct() {
+    const sel = document.getElementById('cot-descuento');
+    if (sel.value === '0') return 0;
+    if (sel.value === 'custom') return parseFloat(document.getElementById('cot-descuento-custom').value) || 0;
+    return parseFloat(sel.value);
+}
+
+function getAnticipoPct() {
+    const sel = document.getElementById('cot-anticipo');
+    if (sel.value === '0') return 0;
+    if (sel.value === 'custom') return parseFloat(document.getElementById('cot-anticipo-custom').value) || 0;
+    return parseFloat(sel.value);
 }
 
 // Setup cotizacion form
@@ -1264,16 +1309,28 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const items = [];
             document.querySelectorAll('.cot-item-row').forEach(row => {
-                const eqId = row.querySelector('.cot-equipo-select').value;
-                const cant = row.querySelector('.cot-cantidad').value || 1;
-                const precio = row.querySelector('.cot-precio').value;
-                const desc = row.querySelector('.cot-desc').value;
+                const isCustom = row.dataset.custom === 'true';
+                const cant = row.querySelector('.cot-cantidad')?.value || 1;
+                const precio = row.querySelector('.cot-precio')?.value;
+                const desc = row.querySelector('.cot-desc')?.value;
+
+                let eqId = null;
+                let modelo = '';
+
+                if (isCustom) {
+                    modelo = row.querySelector('.cot-modelo-custom')?.value || '';
+                } else {
+                    eqId = row.querySelector('.cot-equipo-select')?.value || null;
+                    modelo = row.dataset.modelo || '';
+                }
+
                 if (precio && desc) {
                     items.push({
                         equipo_id: eqId || null,
                         cantidad: parseInt(cant),
                         precio_unitario: parseFloat(precio),
-                        descripcion: desc
+                        descripcion: desc,
+                        modelo: modelo
                     });
                 }
             });
@@ -1293,7 +1350,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         cliente_email: document.getElementById('cot-email').value,
                         cliente_direccion: document.getElementById('cot-direccion').value,
                         incluye_iva: document.getElementById('cot-iva').value === 'true',
+                        descuento_porcentaje: getDescuentoPct(),
+                        anticipo_porcentaje: getAnticipoPct(),
                         notas: document.getElementById('cot-notas').value,
+                        sobre_pedido: document.getElementById('cot-sobre-pedido')?.value || '',
                         items: items
                     })
                 });
@@ -1301,6 +1361,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.success) {
                     notify(`Cotizacion ${data.folio} creada`, 'success');
                     formCot.reset();
+                    document.getElementById('cot-descuento-custom-group').style.display = 'none';
+                    document.getElementById('cot-anticipo-custom-group').style.display = 'none';
                     loadCotizaciones();
                     verCotizacion(data.id);
                 } else {
@@ -1324,15 +1386,69 @@ async function verCotizacion(id) {
         vigencia.setDate(vigencia.getDate() + (cot.vigencia_dias || 30));
         const fechaVig = formatDate(vigencia.toISOString());
 
+        const descPct = parseFloat(cot.descuento_porcentaje) || 0;
+        const descMonto = parseFloat(cot.descuento_monto) || 0;
+        const anticPct = parseFloat(cot.anticipo_porcentaje) || 0;
+        const anticMonto = parseFloat(cot.anticipo_monto) || 0;
+
         let itemsHtml = cot.items.map((it, i) => `
             <tr>
-                <td style="text-align:center">${i + 1}</td>
                 <td>${it.descripcion}</td>
+                <td style="text-align:center">${it.modelo || '-'}</td>
                 <td style="text-align:center">${it.cantidad}</td>
                 <td style="text-align:right">${money(it.precio_unitario)}</td>
                 <td style="text-align:right">${money(it.total_linea)}</td>
             </tr>
         `).join('');
+
+        // Build totals rows
+        let totalsHtml = `
+            <tr class="cot-summary-row">
+                <td colspan="3"></td>
+                <td style="text-align:right; background:#F47427; color:#fff; font-weight:700; padding:6px 10px;">SUBTOTAL</td>
+                <td style="text-align:right; font-weight:600; padding:6px 10px;">${money(cot.subtotal)}</td>
+            </tr>`;
+
+        if (descPct > 0) {
+            totalsHtml += `
+            <tr class="cot-summary-row">
+                <td colspan="3"></td>
+                <td style="text-align:right; background:#F47427; color:#fff; font-weight:700; padding:6px 10px;">DESCUENTO ${descPct}%</td>
+                <td style="text-align:right; font-weight:600; padding:6px 10px; color:#D2152B;">- ${money(descMonto)}</td>
+            </tr>`;
+        }
+
+        if (cot.incluye_iva) {
+            totalsHtml += `
+            <tr class="cot-summary-row">
+                <td colspan="3"></td>
+                <td style="text-align:right; background:#F47427; color:#fff; font-weight:700; padding:6px 10px;">IVA 16%</td>
+                <td style="text-align:right; font-weight:600; padding:6px 10px;">${money(cot.iva)}</td>
+            </tr>`;
+        }
+
+        if (anticPct > 0) {
+            totalsHtml += `
+            <tr class="cot-summary-row">
+                <td colspan="3"></td>
+                <td style="text-align:right; background:#F47427; color:#fff; font-weight:700; padding:6px 10px;">Anticipo ${anticPct}%</td>
+                <td style="text-align:right; font-weight:600; padding:6px 10px;">${money(anticMonto)}</td>
+            </tr>`;
+        }
+
+        totalsHtml += `
+            <tr class="cot-summary-row">
+                <td colspan="3"></td>
+                <td style="text-align:right; background:#D2152B; color:#fff; font-weight:800; padding:8px 10px; font-size:1.05rem;">TOTAL</td>
+                <td style="text-align:right; font-weight:800; padding:8px 10px; font-size:1.05rem;">${money(cot.total)}</td>
+            </tr>`;
+
+        // sobre pedido and vigencia line
+        let infoFooter = '';
+        if (cot.notas) {
+            infoFooter += `<div style="margin-bottom:4px;"><strong>Sobre pedido:</strong> ${cot.notas}</div>`;
+        }
+        infoFooter += `<div><strong>Valido hasta:</strong> ${fechaVig}</div>`;
 
         document.getElementById('cotizacion-print-area').innerHTML = `
             <div class="cot-pdf" id="cot-pdf-content">
@@ -1344,60 +1460,34 @@ async function verCotizacion(id) {
                     <div class="cot-pdf-folio">
                         <div class="folio-number">${cot.folio}</div>
                         <div>Fecha: ${fechaCot}</div>
-                        <div>Vigencia: ${fechaVig}</div>
                     </div>
                 </div>
 
                 <div class="cot-pdf-divider"></div>
 
-                <div class="cot-pdf-info-grid">
-                    <div class="cot-pdf-info-block">
-                        <h4>Datos del Cliente</h4>
-                        <p><strong>${cot.cliente_nombre}</strong></p>
-                        ${cot.cliente_empresa ? `<p>${cot.cliente_empresa}</p>` : ''}
-                        ${cot.cliente_telefono ? `<p>Tel: ${cot.cliente_telefono}</p>` : ''}
-                        ${cot.cliente_email ? `<p>${cot.cliente_email}</p>` : ''}
-                        ${cot.cliente_direccion ? `<p>${cot.cliente_direccion}</p>` : ''}
-                    </div>
-                    <div class="cot-pdf-info-block">
-                        <h4>Datos de DURTRON</h4>
-                        <p><strong>DURTRON - Innovacion Industrial</strong></p>
-                        <p>Av. del Sol #329, Durango, Dgo.</p>
-                        <p>Tel: 618 134 1056</p>
-                        <p>Atencion: ${cot.vendedor}</p>
-                    </div>
+                <div class="cot-pdf-client-line">
+                    <span><strong>Cliente:</strong> ${cot.cliente_nombre}${cot.cliente_empresa ? ' - ' + cot.cliente_empresa : ''}</span>
                 </div>
 
                 <table class="cot-pdf-table">
                     <thead>
                         <tr>
-                            <th style="width:50px">#</th>
-                            <th>Descripcion</th>
-                            <th style="width:70px">Cant.</th>
-                            <th style="width:130px">P. Unitario</th>
-                            <th style="width:130px">Total</th>
+                            <th>PRODUCTO</th>
+                            <th style="width:110px">MODELO</th>
+                            <th style="width:80px">CANTIDAD</th>
+                            <th style="width:120px">PRECIO</th>
+                            <th style="width:120px">TOTAL</th>
                         </tr>
                     </thead>
-                    <tbody>${itemsHtml}</tbody>
+                    <tbody>
+                        ${itemsHtml}
+                        ${totalsHtml}
+                    </tbody>
                 </table>
 
-                <div class="cot-pdf-totals">
-                    <div class="cot-total-row">
-                        <span>Subtotal:</span>
-                        <strong>${money(cot.subtotal)}</strong>
-                    </div>
-                    ${cot.incluye_iva ? `
-                    <div class="cot-total-row">
-                        <span>IVA (16%):</span>
-                        <strong>${money(cot.iva)}</strong>
-                    </div>` : ''}
-                    <div class="cot-total-row cot-total-final">
-                        <span>TOTAL:</span>
-                        <strong>${money(cot.total)}</strong>
-                    </div>
+                <div class="cot-pdf-info-footer" style="margin-top:1rem; font-size:0.85rem; color:#555;">
+                    ${infoFooter}
                 </div>
-
-                ${cot.notas ? `<div class="cot-pdf-notas"><h4>Notas</h4><p>${cot.notas}</p></div>` : ''}
 
                 <div class="cot-pdf-terminos">
                     <h4>TERMINOS Y CONDICIONES DE VENTA, GARANTIA Y SERVICIO</h4>
@@ -1445,20 +1535,15 @@ function imprimirCotizacion() {
             .cot-pdf-logo span { color: #F47427; font-size: 0.85rem; font-weight: 600; }
             .cot-pdf-folio { text-align: right; font-size: 0.85rem; color: #555; }
             .folio-number { font-size: 1.2rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.3rem; }
-            .cot-pdf-divider { height: 4px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1.5rem; }
-            .cot-pdf-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; }
-            .cot-pdf-info-block h4 { color: #D2152B; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
-            .cot-pdf-info-block p { font-size: 0.85rem; line-height: 1.6; }
-            .cot-pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
-            .cot-pdf-table th { background: #1a1a2e; color: white; padding: 0.6rem 0.8rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
-            .cot-pdf-table td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.85rem; }
-            .cot-pdf-table tr:nth-child(even) { background: #f8f9fa; }
-            .cot-pdf-totals { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 1.5rem; }
-            .cot-total-row { display: flex; justify-content: space-between; width: 280px; padding: 0.4rem 0; font-size: 0.9rem; border-bottom: 1px solid #eee; }
-            .cot-total-final { border-top: 2px solid #1a1a2e; border-bottom: none; padding-top: 0.6rem; font-size: 1.1rem; color: #D2152B; }
-            .cot-pdf-notas { background: #fffbeb; border-left: 3px solid #F47427; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; border-radius: 0 6px 6px 0; }
-            .cot-pdf-notas h4 { color: #F47427; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.3rem; }
-            .cot-pdf-terminos { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; font-size: 0.78rem; color: #555; }
+            .cot-pdf-divider { height: 4px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1rem; }
+            .cot-pdf-client-line { font-size: 0.9rem; margin-bottom: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+            .cot-pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+            .cot-pdf-table th { background: #F47427; color: white; padding: 0.6rem 0.8rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+            .cot-pdf-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+            .cot-pdf-table tr:nth-child(even):not(.cot-summary-row) { background: #f8f9fa; }
+            .cot-summary-row td { border-bottom: 1px solid #ddd; }
+            .cot-pdf-info-footer { margin-top: 1rem; font-size: 0.85rem; color: #555; }
+            .cot-pdf-terminos { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 1.5rem; margin-bottom: 1.5rem; font-size: 0.78rem; color: #555; }
             .cot-pdf-terminos h4 { color: #333; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
             .cot-pdf-terminos ul { padding-left: 1.2rem; }
             .cot-pdf-terminos li { margin-bottom: 0.3rem; line-height: 1.5; }

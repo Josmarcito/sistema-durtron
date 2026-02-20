@@ -155,6 +155,19 @@ def run_migrations():
         # Serial number counter table
         safe_execute("CREATE TABLE IF NOT EXISTS serial_counters (equipo_codigo VARCHAR(50) PRIMARY KEY, last_serial INTEGER DEFAULT 0)", "serial_counters table")
 
+        # Cotizaciones discount and anticipo columns
+        cot_cols = [
+            "ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS descuento_porcentaje DECIMAL(5,2) DEFAULT 0",
+            "ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS descuento_monto DECIMAL(12,2) DEFAULT 0",
+            "ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS anticipo_porcentaje DECIMAL(5,2) DEFAULT 0",
+            "ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS anticipo_monto DECIMAL(12,2) DEFAULT 0",
+        ]
+        for sql in cot_cols:
+            safe_execute(sql, "cotizaciones col")
+
+        # Cotizacion items modelo column
+        safe_execute("ALTER TABLE cotizacion_items ADD COLUMN IF NOT EXISTS modelo VARCHAR(100)", "cot_items modelo col")
+
         conn.commit()
         cur.close()
         conn.close()
@@ -1138,20 +1151,33 @@ def create_cotizacion():
             return jsonify({'error': 'Debe agregar al menos un equipo'}), 400
 
         incluye_iva = d.get('incluye_iva', True)
+
+        # Calculate subtotal
         subtotal = 0
         for item in items:
             qty = int(item.get('cantidad', 1))
             precio = float(item.get('precio_unitario', 0))
             subtotal += qty * precio
 
-        iva = round(subtotal * 0.16, 2) if incluye_iva else 0
-        total = round(subtotal + iva, 2)
+        # Discount
+        descuento_pct = float(d.get('descuento_porcentaje', 0))
+        descuento_monto = round(subtotal * descuento_pct / 100, 2)
+
+        # IVA on (subtotal - descuento)
+        base_iva = subtotal - descuento_monto
+        iva = round(base_iva * 0.16, 2) if incluye_iva else 0
+        total = round(base_iva + iva, 2)
+
+        # Anticipo
+        anticipo_pct = float(d.get('anticipo_porcentaje', 0))
+        anticipo_monto = round(total * anticipo_pct / 100, 2)
 
         cur.execute('''
             INSERT INTO cotizaciones (folio, cliente_nombre, cliente_empresa, cliente_telefono,
                 cliente_email, cliente_direccion, vendedor, incluye_iva,
-                subtotal, iva, total, vigencia_dias, notas)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                subtotal, iva, total, vigencia_dias, notas,
+                descuento_porcentaje, descuento_monto, anticipo_porcentaje, anticipo_monto)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
             folio,
             d.get('cliente_nombre', ''),
@@ -1163,7 +1189,9 @@ def create_cotizacion():
             incluye_iva,
             subtotal, iva, total,
             d.get('vigencia_dias', 7),
-            d.get('notas', '')
+            d.get('notas', ''),
+            descuento_pct, descuento_monto,
+            anticipo_pct, anticipo_monto
         ))
         cot_id = cur.fetchone()['id']
 
@@ -1172,13 +1200,14 @@ def create_cotizacion():
             precio = float(item.get('precio_unitario', 0))
             total_linea = round(qty * precio, 2)
             cur.execute('''
-                INSERT INTO cotizacion_items (cotizacion_id, equipo_id, descripcion, cantidad, precio_unitario, total_linea)
-                VALUES (%s,%s,%s,%s,%s,%s)
+                INSERT INTO cotizacion_items (cotizacion_id, equipo_id, descripcion, cantidad, precio_unitario, total_linea, modelo)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
             ''', (
                 cot_id,
                 item.get('equipo_id') or None,
                 item.get('descripcion', ''),
-                qty, precio, total_linea
+                qty, precio, total_linea,
+                item.get('modelo', '')
             ))
 
         conn.commit()

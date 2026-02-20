@@ -556,6 +556,36 @@
                                 <option value="false">No - Sin IVA</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label for="cot-descuento">Descuento</label>
+                            <select id="cot-descuento" onchange="toggleDescuento()">
+                                <option value="0">No</option>
+                                <option value="5">5%</option>
+                                <option value="10">10%</option>
+                                <option value="15">15%</option>
+                                <option value="custom">Otro %</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="cot-descuento-custom-group" style="display:none;">
+                            <label for="cot-descuento-custom">Porcentaje de Descuento</label>
+                            <input type="number" id="cot-descuento-custom" placeholder="Ej: 12" min="0" max="100"
+                                step="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label for="cot-anticipo">Anticipo</label>
+                            <select id="cot-anticipo" onchange="toggleAnticipo()">
+                                <option value="0">No</option>
+                                <option value="25">25%</option>
+                                <option value="50">50%</option>
+                                <option value="75">75%</option>
+                                <option value="custom">Otro %</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="cot-anticipo-custom-group" style="display:none;">
+                            <label for="cot-anticipo-custom">Porcentaje de Anticipo</label>
+                            <input type="number" id="cot-anticipo-custom" placeholder="Ej: 30" min="0" max="100"
+                                step="0.5">
+                        </div>
                         <div class="form-group full-width">
                             <label for="cot-direccion">Direccion</label>
                             <input type="text" id="cot-direccion" placeholder="Direccion del cliente">
@@ -577,8 +607,18 @@
                                         onclick="removeCotItem(this)">X</button>
                                 </div>
                             </div>
-                            <button type="button" class="btn btn-sm btn-secondary" onclick="addCotItem()"
-                                style="margin-top:0.5rem">+ Agregar equipo</button>
+                            <div style="display:flex; gap:8px; margin-top:0.5rem;">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="addCotItem()">+ Agregar
+                                    equipo</button>
+                                <button type="button" class="btn btn-sm" onclick="addCustomCotItem()"
+                                    style="background:rgba(244,116,39,0.2); color:#F47427; border:1px solid #F47427;">+
+                                    Agregar elemento personalizado</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="cot-sobre-pedido">Sobre pedido</label>
+                            <input type="text" id="cot-sobre-pedido" placeholder="Ej: Entrega en 4-6 semanas">
                         </div>
 
                         <div class="form-group full-width">
