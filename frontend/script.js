@@ -1401,7 +1401,6 @@ async function verCotizacion(id) {
             </tr>
         `).join('');
 
-        // Build totals rows
         let totalsHtml = `
             <tr class="cot-summary-row">
                 <td colspan="3"></td>
@@ -1443,7 +1442,6 @@ async function verCotizacion(id) {
                 <td style="text-align:right; font-weight:800; padding:8px 10px; font-size:1.05rem;">${money(cot.total)}</td>
             </tr>`;
 
-        // sobre pedido and vigencia line
         let infoFooter = '';
         if (cot.notas) {
             infoFooter += `<div style="margin-bottom:4px;"><strong>Sobre pedido:</strong> ${cot.notas}</div>`;
@@ -1452,62 +1450,101 @@ async function verCotizacion(id) {
 
         document.getElementById('cotizacion-print-area').innerHTML = `
             <div class="cot-pdf" id="cot-pdf-content">
-                <div class="cot-pdf-header">
-                    <div class="cot-pdf-logo">
-                        <h1>DURTRON</h1>
-                        <span>Innovacion Industrial</span>
+
+                <!-- PAGE 1: COVER -->
+                <div class="cot-cover">
+                    <div class="cot-cover-bg">
+                        <div class="cot-cover-dark">
+                            <div class="cot-cover-logo">
+                                <h1>DURTRON</h1>
+                                <span>INNOVACION INDUSTRIAL</span>
+                            </div>
+                        </div>
+                        <div class="cot-cover-diagonal"></div>
+                        <div class="cot-cover-orange">
+                            <div class="cot-cover-title">COTIZACION</div>
+                        </div>
                     </div>
-                    <div class="cot-pdf-folio">
-                        <div class="folio-number">${cot.folio}</div>
-                        <div>Fecha: ${fechaCot}</div>
+                </div>
+
+                <!-- PAGE 2: QUOTE -->
+                <div class="cot-page cot-page-content">
+                    <div class="cot-pdf-header">
+                        <div class="cot-pdf-logo">
+                            <h1>DURTRON</h1>
+                            <span>Innovacion Industrial</span>
+                        </div>
+                        <div class="cot-pdf-folio">
+                            <div class="folio-number">${cot.folio}</div>
+                            <div>Fecha: ${fechaCot}</div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="cot-pdf-divider"></div>
+                    <div class="cot-pdf-divider"></div>
 
-                <div class="cot-pdf-client-line">
-                    <span><strong>Cliente:</strong> ${cot.cliente_nombre}${cot.cliente_empresa ? ' - ' + cot.cliente_empresa : ''}</span>
-                </div>
+                    <div class="cot-pdf-info-grid">
+                        <div class="cot-pdf-info-block">
+                            <h4>Datos del Cliente</h4>
+                            <p><strong>${cot.cliente_nombre}</strong></p>
+                            ${cot.cliente_empresa ? `<p>${cot.cliente_empresa}</p>` : ''}
+                            ${cot.cliente_telefono ? `<p>Tel: ${cot.cliente_telefono}</p>` : ''}
+                            ${cot.cliente_email ? `<p>${cot.cliente_email}</p>` : ''}
+                            ${cot.cliente_direccion ? `<p>${cot.cliente_direccion}</p>` : ''}
+                        </div>
+                        <div class="cot-pdf-info-block">
+                            <h4>Datos de DURTRON</h4>
+                            <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                            <p>Av. del Sol #329, Durango, Dgo.</p>
+                            <p>Tel: 618 134 1056</p>
+                            <p>Atencion: ${cot.vendedor}</p>
+                        </div>
+                    </div>
 
-                <table class="cot-pdf-table">
-                    <thead>
-                        <tr>
-                            <th>PRODUCTO</th>
-                            <th style="width:110px">MODELO</th>
-                            <th style="width:80px">CANTIDAD</th>
-                            <th style="width:120px">PRECIO</th>
-                            <th style="width:120px">TOTAL</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsHtml}
-                        ${totalsHtml}
-                    </tbody>
-                </table>
+                    <table class="cot-pdf-table">
+                        <thead>
+                            <tr>
+                                <th>PRODUCTO</th>
+                                <th style="width:110px">MODELO</th>
+                                <th style="width:80px">CANTIDAD</th>
+                                <th style="width:120px">PRECIO</th>
+                                <th style="width:120px">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemsHtml}
+                            ${totalsHtml}
+                        </tbody>
+                    </table>
 
-                <div class="cot-pdf-info-footer" style="margin-top:1rem; font-size:0.85rem; color:#555;">
-                    ${infoFooter}
-                </div>
+                    <div class="cot-pdf-info-footer">
+                        ${infoFooter}
+                    </div>
 
-                <div class="cot-pdf-terminos">
-                    <h4>TERMINOS Y CONDICIONES DE VENTA, GARANTIA Y SERVICIO</h4>
-                    <p style="margin-bottom:0.5rem;font-size:0.72rem"><strong>Durtron Fabricacion Industrial</strong> — El cliente reconoce y acepta que al realizar cualquier anticipo, firma de pedido, cotizacion aceptada, comprobante de pago o aprobacion electronica, acepta totalmente los presentes terminos y condiciones.</p>
-                    <ul>
-                        <li><strong>Precios y Validez:</strong> Los precios estan sujetos a cambio sin previo aviso. Esta cotizacion tiene una validez de ${cot.vigencia_dias || 7} dias naturales a partir de su emision.</li>
-                        <li><strong>Anticipo:</strong> La fabricacion inicia con el anticipo del 60% del valor total del pedido. El tiempo de entrega se cuenta a partir de la confirmacion de recepcion del anticipo.</li>
-                        <li><strong>No Devoluciones:</strong> No se realizan devoluciones de anticipos ni cancelaciones del pedido, bajo ninguna circunstancia.</li>
-                        <li><strong>Liquidacion:</strong> Una vez concluida la fabricacion, el cliente tiene 10 dias naturales para liquidar. Despues se aplica cargo de $300 MXN diarios por almacenamiento.</li>
-                        <li><strong>Abandono:</strong> Si despues de 90 dias habiles el cliente no liquida ni retira el equipo, se considerara abandonado y DURTRON podra disponer del mismo.</li>
-                        <li><strong>Tiempos de Entrega:</strong> Las fechas son estimadas, sujetas a disponibilidad de materiales, logistica y causas de fuerza mayor.</li>
-                        <li><strong>Garantia:</strong> 30 dias naturales desde la fecha de entrega, cubriendo defectos de fabricacion y materiales. No cubre: mal uso, golpes, falta de mantenimiento, intervenciones no autorizadas o desgaste normal.</li>
-                        <li><strong>Transporte:</strong> El transporte y sus costos son responsabilidad del cliente. El riesgo se transfiere al entregar al transportista.</li>
-                        <li><strong>Propiedad Intelectual:</strong> Todos los disenos y planos son propiedad exclusiva de DURTRON. Queda prohibida su reproduccion o ingenieria inversa.</li>
-                        <li><strong>Aceptacion:</strong> El pago de anticipo, firma de pedido o aceptacion electronica implica la aceptacion total de estos terminos.</li>
-                    </ul>
-                </div>
+                    <div class="cot-pdf-terminos">
+                        <h4>Terminos y Condiciones de Venta</h4>
+                        <ol>
+                            <li><strong>Plazo de Liquidacion y Cargos por Almacenamiento</strong><br>
+                            Una vez finalizado el proceso de fabricacion de su(s) producto(s), el cliente contara con un plazo maximo de 10 (diez) dias naturales para realizar la liquidacion total del pago correspondiente. En caso de exceder dicho plazo, se aplicara un cargo adicional de $300.00 (trescientos pesos 00/100 M.N.) por cada equipo y por cada dia de retraso, por concepto de almacenamiento y resguardo del equipo.</li>
+                            <li><strong>No Devoluciones</strong><br>
+                            No se realizan devoluciones de anticipos ni de equipos adquiridos, bajo ninguna circunstancia.</li>
+                            <li><strong>Plazo Maximo de Retiro y Abandono del Equipo</strong><br>
+                            Si el cliente no liquida el pago total y retira el equipo en un plazo de 90 (noventa) dias habiles posteriores a la notificacion formal de la finalizacion del mismo, se considerara que el producto ha sido abandonado. En este caso, DURTRON podra disponer del equipo para su venta a un nuevo cliente, sin obligacion de devolucion de anticipos ni posibilidad de reclamacion alguna sobre el producto.</li>
+                            <li><strong>Notificacion de Finalizacion</strong><br>
+                            La notificacion de que el producto ha finalizado su fabricacion se realizara unicamente por escrito, a traves de correo electronico o WhatsApp a los datos de contacto proporcionados por el cliente al momento de realizar su pedido.</li>
+                            <li><strong>Liberacion de Responsabilidad</strong><br>
+                            Una vez cumplido el plazo maximo de 90 dias habiles sin liquidacion y retiro del equipo, DURTRON queda libre de toda responsabilidad sobre la custodia, resguardo o entrega posterior del mismo. El cliente renuncia expresamente a cualquier derecho de reclamacion, indemnizacion o devolucion de anticipos.</li>
+                            <li><strong>Especificaciones y Cambios en el Pedido</strong><br>
+                            Una vez autorizado el pedido y recibido el anticipo, cualquier cambio en especificaciones, medidas, materiales o caracteristicas solicitadas por el cliente podra generar costos adicionales y modificar el tiempo de entrega.</li>
+                            <li><strong>Tiempos de Entrega</strong><br>
+                            Las fechas de entrega son estimadas y pueden variar por causas de fuerza mayor, disponibilidad de materiales, transporte o cualquier otra circunstancia ajena a DURTRON. Dichos retrasos no dan lugar a cancelacion ni devolucion de anticipos.</li>
+                            <li><strong>Condiciones de Fabricacion y Anticipo</strong><br>
+                            La fabricacion del equipo dara inicio <u>unicamente</u> una vez recibido el <strong>anticipo completo equivalente al 60% (sesenta por ciento) del costo total del pedido</strong>, sin excepcion alguna. El tiempo de entrega establecido se contara a partir de la fecha de confirmacion de recepcion del anticipo. Cualquier retraso en el pago del anticipo por parte del cliente modificara el plazo de fabricacion y la fecha estimada de entrega, sin que ello de lugar a cancelaciones ni devoluciones de anticipos.</li>
+                        </ol>
+                    </div>
 
-                <div class="cot-pdf-footer">
-                    <p>DURTRON - Innovacion Industrial | Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
+                    <div class="cot-pdf-footer">
+                        <p>DURTRON - Innovacion Industrial | Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
+                    </div>
                 </div>
             </div>
         `;
@@ -1529,30 +1566,54 @@ function imprimirCotizacion() {
         <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: 'Inter', sans-serif; padding: 0; color: #333; }
-            .cot-pdf { max-width: 800px; margin: 0 auto; padding: 2rem; }
-            .cot-pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
-            .cot-pdf-logo h1 { font-size: 2.2rem; font-weight: 800; color: #D2152B; letter-spacing: 2px; }
-            .cot-pdf-logo span { color: #F47427; font-size: 0.85rem; font-weight: 600; }
-            .cot-pdf-folio { text-align: right; font-size: 0.85rem; color: #555; }
-            .folio-number { font-size: 1.2rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.3rem; }
-            .cot-pdf-divider { height: 4px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1rem; }
-            .cot-pdf-client-line { font-size: 0.9rem; margin-bottom: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+            .cot-pdf { margin: 0; padding: 0; }
+
+            /* Cover page */
+            .cot-cover { width: 100%; height: 100vh; position: relative; overflow: hidden; page-break-after: always; }
+            .cot-cover-bg { width: 100%; height: 100%; display: flex; flex-direction: column; }
+            .cot-cover-dark { background: #1a1a1a; flex: 1; display: flex; align-items: flex-start; padding: 60px; position: relative; }
+            .cot-cover-logo h1 { font-size: 4rem; font-weight: 900; color: #D2152B; letter-spacing: 6px; }
+            .cot-cover-logo span { display: block; color: #F47427; font-size: 1.2rem; font-weight: 600; letter-spacing: 4px; margin-top: 4px; }
+            .cot-cover-diagonal { width: 100%; height: 80px; background: linear-gradient(165deg, #1a1a1a 48%, #F47427 48%); }
+            .cot-cover-orange { background: #F47427; padding: 40px 60px; display: flex; justify-content: flex-end; align-items: flex-end; min-height: 180px; }
+            .cot-cover-title { font-size: 3.5rem; font-weight: 900; color: #fff; letter-spacing: 3px; }
+
+            /* Content page */
+            .cot-page-content { max-width: 800px; margin: 0 auto; padding: 1.5rem 2rem; }
+            .cot-pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+            .cot-pdf-logo h1 { font-size: 2rem; font-weight: 800; color: #D2152B; letter-spacing: 2px; }
+            .cot-pdf-logo span { color: #F47427; font-size: 0.8rem; font-weight: 600; }
+            .cot-pdf-folio { text-align: right; font-size: 0.8rem; color: #555; }
+            .folio-number { font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.2rem; }
+            .cot-pdf-divider { height: 3px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1rem; }
+
+            .cot-pdf-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem; }
+            .cot-pdf-info-block h4 { color: #D2152B; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem; border-bottom: 1px solid #eee; padding-bottom: 0.2rem; }
+            .cot-pdf-info-block p { font-size: 0.78rem; line-height: 1.5; }
+
             .cot-pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-            .cot-pdf-table th { background: #F47427; color: white; padding: 0.6rem 0.8rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
-            .cot-pdf-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+            .cot-pdf-table th { background: #F47427; color: white; padding: 0.45rem 0.6rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+            .cot-pdf-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; font-size: 0.78rem; }
             .cot-pdf-table tr:nth-child(even):not(.cot-summary-row) { background: #f8f9fa; }
             .cot-summary-row td { border-bottom: 1px solid #ddd; }
-            .cot-pdf-info-footer { margin-top: 1rem; font-size: 0.85rem; color: #555; }
-            .cot-pdf-terminos { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 1.5rem; margin-bottom: 1.5rem; font-size: 0.78rem; color: #555; }
-            .cot-pdf-terminos h4 { color: #333; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
-            .cot-pdf-terminos ul { padding-left: 1.2rem; }
-            .cot-pdf-terminos li { margin-bottom: 0.3rem; line-height: 1.5; }
-            .cot-pdf-footer { text-align: center; font-size: 0.75rem; color: #888; padding-top: 1rem; border-top: 1px solid #eee; }
-            @media print { body { padding: 0; } .cot-pdf { padding: 1rem; } }
+
+            .cot-pdf-info-footer { margin-top: 0.8rem; font-size: 0.78rem; color: #555; }
+
+            .cot-pdf-terminos { background: #f8f9fa; border-radius: 6px; padding: 0.7rem 0.9rem; margin-top: 1rem; margin-bottom: 1rem; font-size: 0.6rem; color: #444; line-height: 1.45; }
+            .cot-pdf-terminos h4 { color: #333; font-size: 0.72rem; font-weight: 800; text-align: center; margin-bottom: 0.5rem; }
+            .cot-pdf-terminos ol { padding-left: 1rem; }
+            .cot-pdf-terminos li { margin-bottom: 0.25rem; }
+            .cot-pdf-footer { text-align: center; font-size: 0.65rem; color: #888; padding-top: 0.5rem; border-top: 1px solid #eee; }
+
+            @media print {
+                body { padding: 0; margin: 0; }
+                .cot-cover { height: 100vh; page-break-after: always; }
+                .cot-page-content { padding: 1rem 1.5rem; }
+            }
         </style>
         </head><body>
         ${content.outerHTML}
-        <script>setTimeout(()=>{window.print();},500)<\/script>
+        <script>setTimeout(()=>{window.print();},600)<\/script>
         </body></html>
     `);
     win.document.close();
