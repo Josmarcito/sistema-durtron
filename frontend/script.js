@@ -1566,9 +1566,9 @@ function imprimirCotizacion() {
             /* Cover page */
             .cot-cover { width: 100%; height: 100vh; position: relative; overflow: hidden; page-break-after: always; }
             .cot-cover-bg { width: 100%; height: 100%; display: flex; flex-direction: column; }
-            .cot-cover-dark { background: #1a1a1a !important; flex: 1; display: flex; align-items: flex-start; padding: 60px; position: relative; }
+            .cot-cover-dark { background: #ffffff !important; flex: 1; display: flex; align-items: flex-start; padding: 60px; position: relative; }
             .cot-cover-logo img { max-width: 320px; height: auto; }
-            .cot-cover-diagonal { width: 100%; height: 80px; background: linear-gradient(165deg, #1a1a1a 48%, #C87533 48%) !important; }
+            .cot-cover-diagonal { width: 100%; height: 80px; background: linear-gradient(165deg, #ffffff 48%, #C87533 48%) !important; }
             .cot-cover-orange { background: #C87533 !important; padding: 40px 60px; display: flex; justify-content: flex-end; align-items: flex-end; min-height: 180px; }
             .cot-cover-title { font-size: 3.5rem; font-weight: 900; color: #fff; letter-spacing: 3px; }
 
