@@ -876,18 +876,9 @@ textarea {
     margin-bottom: 1.5rem;
 }
 
-.cot-pdf-logo h1 {
-    font-size: 2.2rem;
-    font-weight: 800;
-    color: #D2152B;
-    letter-spacing: 2px;
-    margin-bottom: 0;
-}
-
-.cot-pdf-logo span {
-    color: #F47427;
-    font-size: 0.85rem;
-    font-weight: 600;
+.cot-pdf-logo img {
+    max-width: 200px;
+    height: auto;
 }
 
 .cot-pdf-folio {
@@ -907,14 +898,14 @@ textarea {
     height: 4px;
     background: linear-gradient(90deg, #D2152B, #F47427);
     border-radius: 2px;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .cot-pdf-info-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .cot-pdf-info-block h4 {
@@ -935,11 +926,11 @@ textarea {
 .cot-pdf-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0;
 }
 
 .cot-pdf-table th {
-    background: #1a1a2e;
+    background: #F47427;
     color: white;
     padding: 0.6rem 0.8rem;
     font-size: 0.8rem;
@@ -955,55 +946,26 @@ textarea {
     color: #333;
 }
 
-.cot-pdf-table tr:nth-child(even) {
+.cot-pdf-table tr:nth-child(even):not(.cot-summary-row) {
     background: #f8f9fa;
 }
 
-.cot-pdf-totals {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    margin-bottom: 1.5rem;
+.cot-summary-row td {
+    border-bottom: 1px solid #ddd;
 }
 
-.cot-total-row {
-    display: flex;
-    justify-content: space-between;
-    width: 280px;
-    padding: 0.4rem 0;
-    font-size: 0.9rem;
-    border-bottom: 1px solid #eee;
-}
-
-.cot-total-final {
-    border-top: 2px solid #1a1a2e;
-    border-bottom: none;
-    padding-top: 0.6rem;
-    font-size: 1.1rem;
-    color: #D2152B;
-}
-
-.cot-pdf-notas {
-    background: #fffbeb;
-    border-left: 3px solid #F47427;
-    padding: 0.8rem 1rem;
-    margin-bottom: 1.5rem;
+.cot-pdf-info-footer {
+    margin-top: 0.8rem;
     font-size: 0.85rem;
-    border-radius: 0 6px 6px 0;
-}
-
-.cot-pdf-notas h4 {
-    color: #F47427;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    margin-bottom: 0.3rem;
+    color: #555;
 }
 
 .cot-pdf-terminos {
     background: #f8f9fa;
     border-radius: 8px;
     padding: 1rem 1.2rem;
-    margin-bottom: 1.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
     font-size: 0.78rem;
     color: #555;
 }
@@ -1016,21 +978,13 @@ textarea {
     margin-bottom: 0.5rem;
 }
 
-.cot-pdf-terminos ul {
+.cot-pdf-terminos ol {
     padding-left: 1.2rem;
 }
 
 .cot-pdf-terminos li {
     margin-bottom: 0.3rem;
     line-height: 1.5;
-}
-
-.cot-pdf-footer {
-    text-align: center;
-    font-size: 0.75rem;
-    color: #888;
-    padding-top: 1rem;
-    border-top: 1px solid #eee;
 }
 
 /* ===== SCROLLBAR ===== */

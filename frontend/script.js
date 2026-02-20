@@ -1653,12 +1653,7 @@ function renderProveedores() {
     `).join('');
 }
 
-// ... event listeners ...
-
 // ==================== REQUISICIONES ====================
-// Variables initialized globally now
-// let requisicionesData = [];
-// let AVAILABLE_PROVIDERS = [];
 
 async function loadProveedores() {
     try {
