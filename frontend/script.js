@@ -1456,13 +1456,12 @@ async function verCotizacion(id) {
                     <div class="cot-cover-bg">
                         <div class="cot-cover-dark">
                             <div class="cot-cover-logo">
-                                <h1>DURTRON</h1>
-                                <span>INNOVACION INDUSTRIAL</span>
+                                <img src="${typeof DURTRON_LOGO_B64 !== 'undefined' ? DURTRON_LOGO_B64 : ''}" alt="DURTRON" style="max-width:320px; height:auto;">
                             </div>
                         </div>
                         <div class="cot-cover-diagonal"></div>
                         <div class="cot-cover-orange">
-                            <div class="cot-cover-title">COTIZACION</div>
+                            <div class="cot-cover-title">COTIZACI&Oacute;N</div>
                         </div>
                     </div>
                 </div>
@@ -1471,8 +1470,7 @@ async function verCotizacion(id) {
                 <div class="cot-page cot-page-content">
                     <div class="cot-pdf-header">
                         <div class="cot-pdf-logo">
-                            <h1>DURTRON</h1>
-                            <span>Innovacion Industrial</span>
+                            <img src="${typeof DURTRON_LOGO_B64 !== 'undefined' ? DURTRON_LOGO_B64 : ''}" alt="DURTRON" style="max-width:200px; height:auto;">
                         </div>
                         <div class="cot-pdf-folio">
                             <div class="folio-number">${cot.folio}</div>
@@ -1568,18 +1566,16 @@ function imprimirCotizacion() {
             /* Cover page */
             .cot-cover { width: 100%; height: 100vh; position: relative; overflow: hidden; page-break-after: always; }
             .cot-cover-bg { width: 100%; height: 100%; display: flex; flex-direction: column; }
-            .cot-cover-dark { background: #1a1a1a; flex: 1; display: flex; align-items: flex-start; padding: 60px; position: relative; }
-            .cot-cover-logo h1 { font-size: 4rem; font-weight: 900; color: #D2152B; letter-spacing: 6px; }
-            .cot-cover-logo span { display: block; color: #F47427; font-size: 1.2rem; font-weight: 600; letter-spacing: 4px; margin-top: 4px; }
-            .cot-cover-diagonal { width: 100%; height: 80px; background: linear-gradient(165deg, #1a1a1a 48%, #F47427 48%); }
-            .cot-cover-orange { background: #F47427; padding: 40px 60px; display: flex; justify-content: flex-end; align-items: flex-end; min-height: 180px; }
+            .cot-cover-dark { background: #1a1a1a !important; flex: 1; display: flex; align-items: flex-start; padding: 60px; position: relative; }
+            .cot-cover-logo img { max-width: 320px; height: auto; }
+            .cot-cover-diagonal { width: 100%; height: 80px; background: linear-gradient(165deg, #1a1a1a 48%, #C87533 48%) !important; }
+            .cot-cover-orange { background: #C87533 !important; padding: 40px 60px; display: flex; justify-content: flex-end; align-items: flex-end; min-height: 180px; }
             .cot-cover-title { font-size: 3.5rem; font-weight: 900; color: #fff; letter-spacing: 3px; }
 
             /* Content page */
             .cot-page-content { max-width: 800px; margin: 0 auto; padding: 1.5rem 2rem; }
             .cot-pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
-            .cot-pdf-logo h1 { font-size: 2rem; font-weight: 800; color: #D2152B; letter-spacing: 2px; }
-            .cot-pdf-logo span { color: #F47427; font-size: 0.8rem; font-weight: 600; }
+            .cot-pdf-logo img { max-width: 200px; height: auto; }
             .cot-pdf-folio { text-align: right; font-size: 0.8rem; color: #555; }
             .folio-number { font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.2rem; }
             .cot-pdf-divider { height: 3px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1rem; }
