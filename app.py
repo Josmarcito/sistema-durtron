@@ -299,7 +299,7 @@ def get_dashboard():
         ingreso_total = round(ingreso_no_facturado + ingreso_facturado, 2)
         total_ventas = row['total_ventas']
 
-        # Top equipos más vendidos (con porcentaje)
+        # Top equipos más vendidos (porcentaje por volumen de venta)
         cur.execute('''
             SELECT e.nombre, e.codigo, COUNT(v.id) as total_vendidos,
                    COALESCE(SUM(CASE WHEN v.facturado=true THEN v.precio_venta * 1.16 ELSE v.precio_venta END),0) as ingreso_total
@@ -310,39 +310,67 @@ def get_dashboard():
             LIMIT 10
         ''')
         top_equipos = [dict(r) for r in cur.fetchall()]
+        total_unidades = sum(t['total_vendidos'] for t in top_equipos)
         for t in top_equipos:
             t['ingreso_total'] = round(float(t['ingreso_total']), 2)
-            t['porcentaje'] = round(t['ingreso_total'] / ingreso_total * 100, 1) if ingreso_total > 0 else 0
+            t['porcentaje'] = round(t['total_vendidos'] / total_unidades * 100, 1) if total_unidades > 0 else 0
 
-        # Historial anual (2026-2030)
+        # Historial anual (2026-2030) con desglose mensual
         cur.execute('''
             SELECT EXTRACT(YEAR FROM fecha_venta)::int as anio,
+                   EXTRACT(MONTH FROM fecha_venta)::int as mes,
                    COUNT(*) as ventas,
                    COALESCE(SUM(CASE WHEN facturado=false THEN precio_venta ELSE 0 END),0) as no_facturado,
                    COALESCE(SUM(CASE WHEN facturado=true THEN precio_venta * 1.16 ELSE 0 END),0) as facturado
             FROM ventas
             WHERE EXTRACT(YEAR FROM fecha_venta) BETWEEN 2026 AND 2030
-            GROUP BY anio ORDER BY anio
+            GROUP BY anio, mes ORDER BY anio, mes
         ''')
-        rows_anual = {r['anio']: r for r in cur.fetchall()}
+        monthly_data = {}
+        for r in cur.fetchall():
+            y = r['anio']
+            if y not in monthly_data:
+                monthly_data[y] = {}
+            nf = round(float(r['no_facturado']), 2)
+            f = round(float(r['facturado']), 2)
+            monthly_data[y][r['mes']] = {
+                'mes': r['mes'],
+                'nombre': MESES[r['mes'] - 1],
+                'ventas': r['ventas'],
+                'no_facturado': nf,
+                'facturado': f,
+                'total': round(nf + f, 2)
+            }
+
         historial_anual = []
+        default_month = {'ventas': 0, 'no_facturado': 0, 'facturado': 0, 'total': 0}
         for y in range(2026, 2031):
-            r = rows_anual.get(y)
-            if r:
-                nf = round(float(r['no_facturado']), 2)
-                f = round(float(r['facturado']), 2)
-                historial_anual.append({
-                    'anio': y,
-                    'ventas': r['ventas'],
-                    'no_facturado': nf,
-                    'facturado': f,
-                    'total': round(nf + f, 2)
+            ym = monthly_data.get(y, {})
+            meses_arr = []
+            total_ventas_y = 0
+            total_nf_y = 0
+            total_f_y = 0
+            for m in range(1, 13):
+                md = ym.get(m, default_month)
+                meses_arr.append({
+                    'mes': m,
+                    'nombre': MESES[m - 1],
+                    'ventas': md.get('ventas', 0),
+                    'no_facturado': md.get('no_facturado', 0),
+                    'facturado': md.get('facturado', 0),
+                    'total': md.get('total', 0)
                 })
-            else:
-                historial_anual.append({
-                    'anio': y, 'ventas': 0,
-                    'no_facturado': 0, 'facturado': 0, 'total': 0
-                })
+                total_ventas_y += md.get('ventas', 0)
+                total_nf_y += md.get('no_facturado', 0)
+                total_f_y += md.get('facturado', 0)
+            historial_anual.append({
+                'anio': y,
+                'ventas': total_ventas_y,
+                'no_facturado': round(total_nf_y, 2),
+                'facturado': round(total_f_y, 2),
+                'total': round(total_nf_y + total_f_y, 2),
+                'meses': meses_arr
+            })
 
         cur.close()
         conn.close()

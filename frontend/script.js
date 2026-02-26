@@ -207,7 +207,7 @@ function renderTopEquiposChart(d) {
     }
 
     const labels = equipos.map(e => e.nombre.length > 20 ? e.nombre.substring(0, 18) + '...' : e.nombre);
-    const dataIngresos = equipos.map(e => e.ingreso_total);
+    const dataVentas = equipos.map(e => e.total_vendidos);
 
     const colors = [
         'rgba(210, 21, 43, 0.85)',
@@ -222,14 +222,14 @@ function renderTopEquiposChart(d) {
         'rgba(230, 126, 34, 0.85)'
     ];
 
-    const totalIngreso = dataIngresos.reduce((a, b) => a + b, 0);
+    const totalUnidades = dataVentas.reduce((a, b) => a + b, 0);
 
     topEquiposChart = new Chart(ctx, {
         type: 'pie',
         data: {
             labels: labels,
             datasets: [{
-                data: dataIngresos,
+                data: dataVentas,
                 backgroundColor: colors.slice(0, equipos.length),
                 borderColor: colors.slice(0, equipos.length).map(c => c.replace('0.85', '1')),
                 borderWidth: 2,
@@ -252,8 +252,8 @@ function renderTopEquiposChart(d) {
                 tooltip: {
                     callbacks: {
                         label: function (ctx) {
-                            const pct = totalIngreso > 0 ? (ctx.raw / totalIngreso * 100).toFixed(1) : 0;
-                            return ctx.label + ': ' + money(ctx.raw) + ' (' + pct + '%)';
+                            const pct = totalUnidades > 0 ? (ctx.raw / totalUnidades * 100).toFixed(1) : 0;
+                            return ctx.label + ': ' + ctx.raw + ' uds (' + pct + '%)';
                         }
                     }
                 }
@@ -294,15 +294,44 @@ function renderHistorialAnual(d) {
         return;
     }
 
-    tbody.innerHTML = historial.map(h => `
-        <tr>
-            <td><strong>${h.anio}</strong></td>
+    let html = '';
+    historial.forEach(h => {
+        html += `
+        <tr class="historial-year-row" style="cursor:pointer;" onclick="toggleMeses(${h.anio})">
+            <td><strong>&#9654; ${h.anio}</strong></td>
             <td style="text-align:center;">${h.ventas}</td>
             <td style="text-align:right;">${money(h.no_facturado)}</td>
             <td style="text-align:right;">${money(h.facturado)}</td>
             <td style="text-align:right; font-weight:700; color:#27ae60;">${money(h.total)}</td>
-        </tr>
-    `).join('');
+        </tr>`;
+        if (h.meses) {
+            h.meses.forEach(m => {
+                html += `
+                <tr class="meses-${h.anio}" style="display:none; background:rgba(255,255,255,0.02);">
+                    <td style="padding-left:2rem; color:var(--text-muted); font-size:0.82rem;">${m.nombre}</td>
+                    <td style="text-align:center; font-size:0.82rem;">${m.ventas}</td>
+                    <td style="text-align:right; font-size:0.82rem;">${money(m.no_facturado)}</td>
+                    <td style="text-align:right; font-size:0.82rem;">${money(m.facturado)}</td>
+                    <td style="text-align:right; font-size:0.82rem;">${money(m.total)}</td>
+                </tr>`;
+            });
+        }
+    });
+    tbody.innerHTML = html;
+}
+
+function toggleMeses(anio) {
+    const rows = document.querySelectorAll(`.meses-${anio}`);
+    const visible = rows.length > 0 && rows[0].style.display !== 'none';
+    rows.forEach(r => r.style.display = visible ? 'none' : '');
+    // Toggle arrow
+    const yearRows = document.querySelectorAll('.historial-year-row');
+    yearRows.forEach(yr => {
+        const strong = yr.querySelector('strong');
+        if (strong && strong.textContent.includes(anio)) {
+            strong.innerHTML = (visible ? '&#9654; ' : '&#9660; ') + anio;
+        }
+    });
 }
 
 // ===== CATALOGO =====
