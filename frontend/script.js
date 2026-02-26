@@ -82,7 +82,6 @@ async function loadConfig() {
         const r = await fetch(`${API}/api/config`);
         configData = await r.json();
         fillSelect('cat-categoria', configData.categorias);
-        fillSelect('inv-estado', configData.estados_inventario);
         fillSelect('inv-filter-estado', configData.estados_inventario, true);
         fillSelect('venta-forma-pago', configData.formas_pago);
     } catch (e) {
@@ -625,22 +624,22 @@ async function loadInventario() {
 function renderInventario(items) {
     const tbody = document.getElementById('inventario-tbody');
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="loading">No hay items en inventario</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">No hay items en inventario</td></tr>';
         return;
     }
     tbody.innerHTML = items.map(it => `<tr>
         <td>${it.id}</td>
-        <td><strong>${it.equipo_codigo}</strong></td>
-        <td>${it.equipo_nombre}</td>
+        <td><strong>${it.equipo_nombre}</strong></td>
         <td>${it.numero_serie || '-'}</td>
-        <td>${badgeEstado(it.estado)}</td>
+        <td>${badgeEstado(it.estado)}${it.estado === 'Disponible - Faltan Piezas' && it.observaciones ? `<br><small style="color:#e67e22;">${it.observaciones}</small>` : ''}</td>
         <td class="text-right">${money(it.precio_lista)}</td>
         <td>${formatDate(it.fecha_ingreso)}</td>
         <td>
             <div class="action-buttons">
                 <button class="btn btn-sm btn-primary" onclick="verDetalle(${it.id})">Ver</button>
+                <button class="btn btn-sm" style="background:#8e44ad;color:#fff;" onclick="abrirCambiarEstado(${it.id},'${it.estado.replace(/'/g, "\\'")}')" title="Cambiar estado">Estado</button>
                 ${canSell(it.estado) ? `<button class="btn btn-sm btn-success" onclick="openVenta(${it.id})">Vender</button>` : ''}
-                ${it.estado !== 'Vendida' ? `<button class="btn btn-sm btn-danger" onclick="deleteInventario(${it.id})">Eliminar</button>` : ''}
+                <button class="btn btn-sm btn-danger" onclick="deleteInventario(${it.id})">Eliminar</button>
             </div>
         </td>
     </tr>`).join('');
@@ -704,9 +703,8 @@ function setupInvFilters() {
 }
 
 function canSell(estado) {
-    return ['Disponible', 'En Planta 1', 'En Planta 2', 'Apartada', 'Anticipo'].includes(estado);
+    return ['Disponible', 'Disponible - Faltan Piezas'].includes(estado);
 }
-
 // ===== VER DETALLE =====
 async function verDetalle(id) {
     try {
@@ -1131,16 +1129,52 @@ function formatDate(d) {
 function badgeEstado(estado) {
     const map = {
         'Disponible': 'badge-disponible',
-        'Vendida': 'badge-vendida',
         'En Fabricacion': 'badge-fabricacion',
-        'En Planta 1': 'badge-planta1',
-        'En Planta 2': 'badge-planta2',
-        'No Disponible': 'badge-no-disponible',
-        'Anticipo': 'badge-anticipo',
-        'En Cotizacion': 'badge-cotizacion',
-        'Apartada': 'badge-apartada'
+        'Disponible - Faltan Piezas': 'badge-anticipo',
+        'Vendida': 'badge-vendida'
     };
     return `<span class="badge ${map[estado] || 'badge-disponible'}">${estado}</span>`;
+}
+
+function toggleNotaPiezas() {
+    const estado = document.getElementById('inv-estado').value;
+    document.getElementById('nota-piezas-group').style.display = estado === 'Disponible - Faltan Piezas' ? '' : 'none';
+}
+
+function toggleNotaPiezasModal() {
+    const estado = document.getElementById('cambiar-estado-select').value;
+    document.getElementById('nota-piezas-modal-group').style.display = estado === 'Disponible - Faltan Piezas' ? '' : 'none';
+}
+
+function abrirCambiarEstado(iid, estadoActual) {
+    document.getElementById('cambiar-estado-id').value = iid;
+    document.getElementById('cambiar-estado-select').value = estadoActual;
+    document.getElementById('cambiar-estado-nota').value = '';
+    toggleNotaPiezasModal();
+    openModal('modal-cambiar-estado');
+}
+
+async function guardarCambioEstado() {
+    const iid = document.getElementById('cambiar-estado-id').value;
+    const estado = document.getElementById('cambiar-estado-select').value;
+    const nota = document.getElementById('cambiar-estado-nota').value;
+    try {
+        const res = await fetch(`${API}/api/inventario/${iid}/estado`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado, nota_piezas: nota })
+        });
+        const result = await res.json();
+        if (result.success) {
+            notify('Estado actualizado', 'success');
+            closeModal('modal-cambiar-estado');
+            loadInventario();
+        } else {
+            notify(result.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
 }
 
 function notify(msg, type) {

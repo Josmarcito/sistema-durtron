@@ -252,8 +252,7 @@ def check_auth_before():
 def get_config():
     return jsonify({
         'estados_inventario': [
-            'Disponible', 'En Fabricacion', 'En Planta 1', 'En Planta 2',
-            'No Disponible', 'Anticipo', 'En Cotizacion', 'Apartada'
+            'Disponible', 'En Fabricacion', 'Disponible - Faltan Piezas'
         ],
         'categorias': [
             'Quebradoras de Quijadas', 'Pulverizadores de Martillos',
@@ -793,9 +792,10 @@ def get_inventario():
         cur = conn.cursor()
         cur.execute('''
             SELECT i.*, e.codigo as equipo_codigo, e.nombre as equipo_nombre,
-                   e.marca, e.modelo, e.categoria, e.precio_lista, e.precio_minimo, e.precio_costo
+                   e.marca, e.modelo, e.categoria, e.precio_lista, e.precio_costo
             FROM inventario i
             JOIN equipos e ON i.equipo_id = e.id
+            WHERE i.estado != 'Vendida'
             ORDER BY i.fecha_creacion DESC
         ''')
         data = cur.fetchall()
@@ -853,6 +853,25 @@ def get_inv_item(iid):
         if item:
             return json.dumps(item, default=decimal_default), 200, {'Content-Type': 'application/json'}
         return jsonify({'error': 'No encontrado'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/inventario/<int:iid>/estado', methods=['PATCH'])
+def update_inv_estado(iid):
+    try:
+        d = request.json
+        nuevo_estado = (d.get('estado') or '').strip()
+        nota_piezas = (d.get('nota_piezas') or '').strip()
+        if nuevo_estado not in ['Disponible', 'En Fabricacion', 'Disponible - Faltan Piezas']:
+            return jsonify({'error': 'Estado no valido'}), 400
+        obs = nota_piezas if nuevo_estado == 'Disponible - Faltan Piezas' else ''
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('UPDATE inventario SET estado=%s, observaciones=%s WHERE id=%s', (nuevo_estado, obs, iid))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': f'Estado actualizado a {nuevo_estado}'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

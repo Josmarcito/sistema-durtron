@@ -391,9 +391,17 @@
                         </div>
                         <div class="form-group">
                             <label for="inv-estado">Estado *</label>
-                            <select id="inv-estado" required>
+                            <select id="inv-estado" required onchange="toggleNotaPiezas()">
                                 <option value="">Seleccionar...</option>
+                                <option value="Disponible">Disponible</option>
+                                <option value="En Fabricacion">En Fabricacion</option>
+                                <option value="Disponible - Faltan Piezas">Disponible - Faltan Piezas</option>
                             </select>
+                        </div>
+                        <div class="form-group full-width" id="nota-piezas-group" style="display:none;">
+                            <label for="inv-nota-piezas">Piezas Faltantes</label>
+                            <textarea id="inv-nota-piezas" rows="2"
+                                placeholder="Ej: Falta polea principal, bandas de transmision..."></textarea>
                         </div>
                         <div class="form-group full-width">
                             <label for="inv-obs">Observaciones</label>
@@ -413,6 +421,9 @@
                             <input type="text" id="inv-search" class="search-input" placeholder="Buscar...">
                             <select id="inv-filter-estado" class="filter-select">
                                 <option value="">Todos los estados</option>
+                                <option value="Disponible">Disponible</option>
+                                <option value="En Fabricacion">En Fabricacion</option>
+                                <option value="Disponible - Faltan Piezas">Disponible - Faltan Piezas</option>
                             </select>
                         </div>
                     </div>
@@ -421,7 +432,6 @@
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>Codigo</th>
                                     <th>Equipo</th>
                                     <th>N/Serie</th>
                                     <th>Estado</th>
@@ -432,13 +442,44 @@
                             </thead>
                             <tbody id="inventario-tbody">
                                 <tr>
-                                    <td colspan="8" class="loading">Cargando...</td>
+                                    <td colspan="7" class="loading">Cargando...</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </section>
+
+            <!-- Modal Cambiar Estado -->
+            <div class="modal" id="modal-cambiar-estado">
+                <div class="modal-content" style="max-width:450px;">
+                    <div class="modal-header">
+                        <h3>Cambiar Estado</h3>
+                        <button class="modal-close" onclick="closeModal('modal-cambiar-estado')">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="cambiar-estado-id">
+                        <div class="form-group">
+                            <label for="cambiar-estado-select">Nuevo Estado</label>
+                            <select id="cambiar-estado-select" onchange="toggleNotaPiezasModal()">
+                                <option value="Disponible">Disponible</option>
+                                <option value="En Fabricacion">En Fabricacion</option>
+                                <option value="Disponible - Faltan Piezas">Disponible - Faltan Piezas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="nota-piezas-modal-group" style="display:none;">
+                            <label for="cambiar-estado-nota">Piezas Faltantes</label>
+                            <textarea id="cambiar-estado-nota" rows="2"
+                                placeholder="Ej: Falta polea principal..."></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" onclick="guardarCambioEstado()">Guardar</button>
+                            <button class="btn btn-secondary"
+                                onclick="closeModal('modal-cambiar-estado')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- ============ VENTAS ============ -->
             <section id="ventas" class="section">
