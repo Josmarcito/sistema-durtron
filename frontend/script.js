@@ -2297,6 +2297,13 @@ async function verRequisicion(rid) {
                 </div>
                 <button class="btn" style="background:#D2152B; color:#fff;" onclick="imprimirReqConsolidado(${r.id})">Generar PDF Consolidado</button>
             </div>
+            <div style="background:rgba(244,116,39,0.1); padding:12px; border-radius:8px; margin-top:8px; border:1px solid rgba(244,116,39,0.3); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong style="color:#F47427;">📦 Guía de Recogida</strong>
+                    <small style="color:#888; display:block;">PDF con todas las guías de rastreo para enviar a quien recoge</small>
+                </div>
+                <button class="btn" style="background:#F47427; color:#fff;" onclick="generarPdfGuiasRecogida(${r.id})">Generar Guía</button>
+            </div>
         `;
 
         // General Actions — estado is now auto-calculated but keep for manual override
@@ -2715,12 +2722,136 @@ async function guardarEnvioProveedor(rid, provName, pNameId) {
         const result = await res.json();
         if (result.success) {
             notify(`Envío de ${provName} actualizado`, 'success');
-            verDetalleRequisicion(rid); // Refresh detail view
+            verRequisicion(rid); // Refresh detail view
         } else {
             notify(result.error || 'Error', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function generarPdfGuiasRecogida(rid) {
+    try {
+        const reqRes = await fetch(`${API}/api/requisiciones/${rid}`);
+        const reqData = await reqRes.json();
+        const envios = (reqData.envios || []).filter(e => e.guia_rastreo);
+
+        if (envios.length === 0) {
+            notify('No hay guías de rastreo registradas. Registre al menos una guía en un proveedor.', 'error');
+            return;
+        }
+
+        const folio = reqData.folio || '-';
+        const fecha = new Date().toLocaleDateString('es-MX');
+        const proyecto = reqData.equipo_nombre || '-';
+        const numSerie = reqData.numero_serie || '';
+
+        // Group by who picks up
+        const recogeMap = {};
+        envios.forEach(e => {
+            const key = e.nombre_recoge || 'Sin asignar';
+            if (!recogeMap[key]) recogeMap[key] = { tel: e.telefono_recoge || '', guias: [] };
+            recogeMap[key].guias.push(e);
+        });
+
+        let guiasHtml = '';
+        Object.keys(recogeMap).forEach(nombre => {
+            const info = recogeMap[nombre];
+            guiasHtml += `
+                <div style="margin-bottom:1.5rem;">
+                    <div style="background:#1a1a2e; color:#fff; padding:8px 12px; border-radius:6px 6px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong style="font-size:1rem;">👤 ${nombre}</strong>
+                            ${info.tel ? `<span style="color:#F47427; margin-left:10px;">📱 ${info.tel}</span>` : ''}
+                        </div>
+                        <span style="background:#F47427; color:#fff; padding:2px 8px; border-radius:3px; font-size:0.75rem;">${info.guias.length} guía(s)</span>
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; border:1px solid #ddd;">
+                        <thead>
+                            <tr style="background:#f0f0f0;">
+                                <th style="padding:8px; text-align:left; font-size:0.8rem; border-bottom:2px solid #ddd;">Proveedor</th>
+                                <th style="padding:8px; text-align:left; font-size:0.8rem; border-bottom:2px solid #ddd;">Paquetería</th>
+                                <th style="padding:8px; text-align:left; font-size:0.8rem; border-bottom:2px solid #ddd;"># Guía de Rastreo</th>
+                                <th style="padding:8px; text-align:center; font-size:0.8rem; border-bottom:2px solid #ddd;">Estado</th>
+                                <th style="padding:8px; text-align:left; font-size:0.8rem; border-bottom:2px solid #ddd;">Notas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${info.guias.map(g => {
+                const estColor = g.estado === 'Recibido' ? '#28a745' : g.estado === 'Enviado' ? '#F47427' : '#888';
+                return `
+                                    <tr style="border-bottom:1px solid #eee;">
+                                        <td style="padding:8px; font-weight:600;">${g.proveedor_nombre}</td>
+                                        <td style="padding:8px;">${g.paqueteria || '-'}</td>
+                                        <td style="padding:8px;"><strong style="font-size:1.1rem; color:#D2152B; letter-spacing:1px;">${g.guia_rastreo}</strong></td>
+                                        <td style="padding:8px; text-align:center;"><span style="background:${estColor}; color:#fff; padding:2px 8px; border-radius:3px; font-size:0.7rem;">${g.estado}</span></td>
+                                        <td style="padding:8px; font-size:0.85rem; color:#666;">${g.notas || '-'}</td>
+                                    </tr>
+                                `;
+            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        });
+
+        const htmlContent = `
+            <html><head>
+            <title>Guías de Recogida - ${folio}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; padding: 0; color: #333; }
+                .guia-pdf { max-width: 800px; margin: 0 auto; padding: 2rem; }
+                @media print { body { padding: 0; } .guia-pdf { padding: 1rem; } }
+            </style>
+            </head><body>
+            <div class="guia-pdf">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
+                    <div>
+                        <h1 style="font-size:2rem; font-weight:800; color:#D2152B; letter-spacing:2px;">DURTRON</h1>
+                        <span style="color:#F47427; font-size:0.85rem; font-weight:600;">Innovacion Industrial</span>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:1.2rem; font-weight:700; color:#1a1a2e;">${folio}</div>
+                        <div style="font-size:0.85rem; color:#555;">GUÍAS DE RECOGIDA</div>
+                        <div style="font-size:0.85rem; color:#555;">Fecha: ${fecha}</div>
+                    </div>
+                </div>
+
+                <div style="height:4px; background:linear-gradient(90deg,#D2152B,#F47427); border-radius:2px; margin-bottom:1.5rem;"></div>
+
+                <div style="background:#f8f9fa; padding:12px; border-radius:6px; margin-bottom:1.5rem; display:flex; justify-content:space-between;">
+                    <div>
+                        <strong>Proyecto:</strong> ${proyecto}
+                        ${numSerie ? `<span style="background:linear-gradient(135deg,#F47427,#e65100); color:#fff; padding:2px 10px; border-radius:4px; font-weight:700; font-size:0.85rem; margin-left:8px;">${numSerie}</span>` : ''}
+                    </div>
+                    <div><strong>Total guías:</strong> ${envios.length}</div>
+                </div>
+
+                ${guiasHtml}
+
+                <div style="margin-top:2rem; padding:15px; background:#fffbeb; border-left:3px solid #F47427; border-radius:0 6px 6px 0;">
+                    <strong style="color:#F47427; font-size:0.8rem;">INSTRUCCIONES</strong>
+                    <p style="font-size:0.85rem; margin-top:5px;">Recoger los paquetes de las paqueterías indicadas. Verificar el número de guía al momento de la recogida. Confirmar recepción con el área de compras.</p>
+                </div>
+
+                <div style="text-align:center; font-size:0.75rem; color:#888; padding-top:1.5rem; margin-top:1.5rem; border-top:1px solid #eee;">
+                    <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                    <p>Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
+                </div>
+            </div>
+            <script>setTimeout(()=>{window.print();},500)<\/script>
+            </body></html>
+        `;
+
+        const win = window.open('', '_blank');
+        win.document.write(htmlContent);
+        win.document.close();
+
+    } catch (e) {
+        notify('Error al generar guía de recogida: ' + e.message, 'error');
     }
 }
 
