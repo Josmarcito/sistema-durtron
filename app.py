@@ -2068,6 +2068,18 @@ def health():
     except Exception as e:
         return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
 
+# Auto-migrate on import (works with gunicorn)
+try:
+    _conn = get_db()
+    _cur = _conn.cursor()
+    _cur.execute("ALTER TABLE equipos ADD COLUMN IF NOT EXISTS version VARCHAR(20) DEFAULT '1.0'")
+    _conn.commit()
+    _cur.close()
+    _conn.close()
+    print("Migration OK: equipos.version")
+except Exception as _e:
+    print(f"Migration warning: {_e}")
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
