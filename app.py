@@ -1620,6 +1620,8 @@ def get_requisicion(rid):
             return jsonify({'error': 'Requisicion no encontrada'}), 404
         cur.execute('SELECT * FROM requisicion_items WHERE requisicion_id=%s ORDER BY id', (rid,))
         req['items'] = cur.fetchall()
+        cur.execute('SELECT * FROM requisicion_envios WHERE requisicion_id=%s ORDER BY proveedor_nombre', (rid,))
+        req['envios'] = cur.fetchall()
         cur.close()
         conn.close()
         return Response(json.dumps(req, default=decimal_default), mimetype='application/json')
@@ -1651,6 +1653,67 @@ def update_requisicion_estado(rid):
         cur.close()
         conn.close()
         return jsonify({'success': True, 'message': 'Estado actualizado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/requisiciones/<int:rid>/envios', methods=['PUT'])
+def upsert_requisicion_envio(rid):
+    try:
+        d = request.json
+        prov = d.get('proveedor_nombre', '').strip()
+        if not prov:
+            return jsonify({'error': 'proveedor_nombre es requerido'}), 400
+        conn = get_db()
+        cur = conn.cursor()
+        # Check if envio already exists
+        cur.execute('SELECT id FROM requisicion_envios WHERE requisicion_id=%s AND proveedor_nombre=%s', (rid, prov))
+        existing = cur.fetchone()
+        if existing:
+            cur.execute('''
+                UPDATE requisicion_envios
+                SET estado=%s, guia_rastreo=%s, paqueteria=%s, nombre_recoge=%s,
+                    telefono_recoge=%s, notas=%s, fecha_envio=%s, fecha_recibido=%s
+                WHERE requisicion_id=%s AND proveedor_nombre=%s
+            ''', (
+                d.get('estado', 'Pendiente'),
+                d.get('guia_rastreo', ''),
+                d.get('paqueteria', ''),
+                d.get('nombre_recoge', ''),
+                d.get('telefono_recoge', ''),
+                d.get('notas', ''),
+                d.get('fecha_envio') or None,
+                d.get('fecha_recibido') or None,
+                rid, prov
+            ))
+        else:
+            cur.execute('''
+                INSERT INTO requisicion_envios (requisicion_id, proveedor_nombre, estado, guia_rastreo,
+                    paqueteria, nombre_recoge, telefono_recoge, notas, fecha_envio, fecha_recibido)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ''', (
+                rid, prov,
+                d.get('estado', 'Pendiente'),
+                d.get('guia_rastreo', ''),
+                d.get('paqueteria', ''),
+                d.get('nombre_recoge', ''),
+                d.get('telefono_recoge', ''),
+                d.get('notas', ''),
+                d.get('fecha_envio') or None,
+                d.get('fecha_recibido') or None
+            ))
+        # Auto-update requisicion general estado
+        cur.execute('SELECT DISTINCT proveedor_nombre FROM requisicion_items WHERE requisicion_id=%s AND proveedor_nombre IS NOT NULL AND proveedor_nombre != %s', (rid, ''))
+        all_provs = [r['proveedor_nombre'] for r in cur.fetchall()]
+        cur.execute('SELECT estado FROM requisicion_envios WHERE requisicion_id=%s', (rid,))
+        envio_estados = [r['estado'] for r in cur.fetchall()]
+        if all_provs and len(envio_estados) >= len(all_provs) and all(e == 'Recibido' for e in envio_estados):
+            cur.execute('UPDATE requisiciones SET estado=%s WHERE id=%s', ('Recibida', rid))
+        elif any(e == 'Enviado' for e in envio_estados):
+            cur.execute('UPDATE requisiciones SET estado=%s WHERE id=%s', ('Enviada', rid))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': f'Envio de {prov} actualizado'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2303,10 +2366,26 @@ try:
         )
     ''')
     _cur.execute("ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS numero_serie VARCHAR(100)")
+    _cur.execute('''
+        CREATE TABLE IF NOT EXISTS requisicion_envios (
+            id SERIAL PRIMARY KEY,
+            requisicion_id INTEGER NOT NULL REFERENCES requisiciones(id) ON DELETE CASCADE,
+            proveedor_nombre VARCHAR(100) NOT NULL,
+            estado VARCHAR(30) DEFAULT 'Pendiente',
+            guia_rastreo VARCHAR(100),
+            paqueteria VARCHAR(100),
+            nombre_recoge VARCHAR(100),
+            telefono_recoge VARCHAR(50),
+            notas TEXT,
+            fecha_envio DATE,
+            fecha_recibido DATE,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     _conn.commit()
     _cur.close()
     _conn.close()
-    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos, vendedores_catalogo, req numero_serie")
+    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos, vendedores_catalogo, req numero_serie, requisicion_envios")
 except Exception as _e:
     print(f"Migration warning: {_e}")
 

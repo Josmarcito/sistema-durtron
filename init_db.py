@@ -258,6 +258,26 @@ def init_db():
     ''')
     print("  OK tabla 'requisicion_items'")
 
+    # Tabla requisicion_envios (rastreo por proveedor)
+    print("Creando tabla 'requisicion_envios'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS requisicion_envios (
+            id SERIAL PRIMARY KEY,
+            requisicion_id INTEGER NOT NULL REFERENCES requisiciones(id) ON DELETE CASCADE,
+            proveedor_nombre VARCHAR(100) NOT NULL,
+            estado VARCHAR(30) DEFAULT 'Pendiente',
+            guia_rastreo VARCHAR(100),
+            paqueteria VARCHAR(100),
+            nombre_recoge VARCHAR(100),
+            telefono_recoge VARCHAR(50),
+            notas TEXT,
+            fecha_envio DATE,
+            fecha_recibido DATE,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'requisicion_envios'")
+
     # Migration: add version column to equipos
     for col, tipo in [('version', "VARCHAR(20) DEFAULT '1.0'")]:
         try:

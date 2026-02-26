@@ -2207,19 +2207,77 @@ async function verRequisicion(rid) {
         itemsHtml += `</tbody></table></div>`;
 
         // Send Actions
-        let sendActionsHtml = '<div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-top:10px;"><h4>Enviar Pedidos por Proveedor</h4>';
+        let sendActionsHtml = '<div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-top:10px;"><h4>Proveedores - Envíos y Rastreo</h4>';
+
+        const enviosMap = {};
+        (r.envios || []).forEach(e => { enviosMap[e.proveedor_nombre] = e; });
 
         Object.keys(itemsByProv).forEach(pName => {
             if (pName === 'Sin Asignar') return;
             const provTotal = itemsByProv[pName].reduce((s, i) => s + i.rowTotal, 0);
             const eqName = (r.equipo_nombre || '').replace(/'/g, "\\'");
+            const envio = enviosMap[pName] || {};
+            const est = envio.estado || 'Pendiente';
+            const estColor = est === 'Recibido' ? '#28a745' : est === 'Enviado' ? '#F47427' : '#888';
+            const pNameSafe = pName.replace(/'/g, "\\'");
+            const pNameId = pName.replace(/[^a-zA-Z0-9]/g, '_');
+
             sendActionsHtml += `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px; margin-bottom:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
-                    <span><strong>${pName}</strong> (${itemsByProv[pName].length} partidas - $${provTotal.toFixed(2)})</span>
-                    <div style="gap:5px; display:flex;">
-                         <button class="btn btn-sm" style="background:#D2152B;color:#fff;" onclick="imprimirReqProveedor(${r.id}, '${pName.replace(/'/g, "\\'")}')" title="Generar PDF">PDF</button>
-                         <button class="btn btn-success btn-sm" onclick="enviarReqWhatsApp(${r.id}, '${pName.replace(/'/g, "\\'")}', '${eqName}')">WhatsApp</button>
-                         <button class="btn btn-primary btn-sm" onclick="enviarReqEmail(${r.id}, '${pName.replace(/'/g, "\\'")}')">Email</button>
+                <div style="background:rgba(0,0,0,0.2); padding:10px; margin-bottom:8px; border-radius:6px; border-left:4px solid ${estColor};">
+                    <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="document.getElementById('envio-panel-${pNameId}').style.display = document.getElementById('envio-panel-${pNameId}').style.display === 'none' ? 'block' : 'none'">
+                        <div>
+                            <strong>${pName}</strong> (${itemsByProv[pName].length} partidas)
+                            <span style="background:${estColor}; color:#fff; padding:2px 8px; border-radius:3px; font-size:0.7rem; font-weight:700; margin-left:8px;">${est}</span>
+                            ${envio.guia_rastreo ? `<small style="color:#F47427; margin-left:8px;">📦 Guía: ${envio.guia_rastreo}</small>` : ''}
+                        </div>
+                        <div style="gap:5px; display:flex;">
+                             <button class="btn btn-sm" style="background:#D2152B;color:#fff;" onclick="event.stopPropagation(); imprimirReqProveedor(${r.id}, '${pNameSafe}')" title="Generar PDF">PDF</button>
+                             <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); enviarReqWhatsApp(${r.id}, '${pNameSafe}', '${eqName}')">WhatsApp</button>
+                             <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); enviarReqEmail(${r.id}, '${pNameSafe}')">Email</button>
+                        </div>
+                    </div>
+                    <div id="envio-panel-${pNameId}" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Estado</label>
+                                <select id="envio-estado-${pNameId}" style="width:100%; padding:6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff;">
+                                    <option value="Pendiente" ${est === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                                    <option value="Enviado" ${est === 'Enviado' ? 'selected' : ''}>Enviado</option>
+                                    <option value="Recibido" ${est === 'Recibido' ? 'selected' : ''}>Recibido</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Paquetería</label>
+                                <input type="text" id="envio-paqueteria-${pNameId}" value="${envio.paqueteria || ''}" placeholder="Ej: Tres Guerras" style="padding:6px;">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;"># Guía de Rastreo</label>
+                                <input type="text" id="envio-guia-${pNameId}" value="${envio.guia_rastreo || ''}" placeholder="Número de guía" style="padding:6px;">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Nombre de quien recoge</label>
+                                <input type="text" id="envio-recoge-${pNameId}" value="${envio.nombre_recoge || ''}" placeholder="Nombre" style="padding:6px;">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Teléfono</label>
+                                <input type="text" id="envio-tel-${pNameId}" value="${envio.telefono_recoge || ''}" placeholder="Teléfono" style="padding:6px;">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Notas</label>
+                                <input type="text" id="envio-notas-${pNameId}" value="${envio.notas || ''}" placeholder="Observaciones" style="padding:6px;">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Fecha envío</label>
+                                <input type="date" id="envio-fecha-envio-${pNameId}" value="${envio.fecha_envio || ''}" style="padding:6px;">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem;">Fecha recibido</label>
+                                <input type="date" id="envio-fecha-recibido-${pNameId}" value="${envio.fecha_recibido || ''}" style="padding:6px;">
+                            </div>
+                            <div style="display:flex; align-items:flex-end;">
+                                <button class="btn btn-primary btn-sm" style="width:100%; padding:6px;" onclick="guardarEnvioProveedor(${r.id}, '${pNameSafe}', '${pNameId}')">💾 Guardar</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -2241,7 +2299,7 @@ async function verRequisicion(rid) {
             </div>
         `;
 
-        // General Actions
+        // General Actions — estado is now auto-calculated but keep for manual override
         const generalActions = `
             <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap; justify-content: flex-end; align-items:center;">
                  <label>Estado General: </label>
@@ -2630,6 +2688,36 @@ async function enviarReqEmail(rid, provName) {
             notify(data.message, 'success');
         } else {
             notify(data.error || 'Error al enviar email', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function guardarEnvioProveedor(rid, provName, pNameId) {
+    try {
+        const data = {
+            proveedor_nombre: provName,
+            estado: document.getElementById(`envio-estado-${pNameId}`).value,
+            paqueteria: document.getElementById(`envio-paqueteria-${pNameId}`).value,
+            guia_rastreo: document.getElementById(`envio-guia-${pNameId}`).value,
+            nombre_recoge: document.getElementById(`envio-recoge-${pNameId}`).value,
+            telefono_recoge: document.getElementById(`envio-tel-${pNameId}`).value,
+            notas: document.getElementById(`envio-notas-${pNameId}`).value,
+            fecha_envio: document.getElementById(`envio-fecha-envio-${pNameId}`).value,
+            fecha_recibido: document.getElementById(`envio-fecha-recibido-${pNameId}`).value
+        };
+        const res = await fetch(`${API}/api/requisiciones/${rid}/envios`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            notify(`Envío de ${provName} actualizado`, 'success');
+            verDetalleRequisicion(rid); // Refresh detail view
+        } else {
+            notify(result.error || 'Error', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');
