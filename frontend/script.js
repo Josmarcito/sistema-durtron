@@ -2948,7 +2948,7 @@ let etiquetaLogoImg = null;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = function () {
-        // Convert to grayscale for engraving
+        // Convert to black/white for engraving - lower threshold to catch orange/red
         const c = document.createElement('canvas');
         c.width = img.width; c.height = img.height;
         const ctx2 = c.getContext('2d');
@@ -2956,9 +2956,11 @@ let etiquetaLogoImg = null;
         const imgData = ctx2.getImageData(0, 0, c.width, c.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
+            const alpha = d[i + 3];
+            if (alpha < 30) { d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; d[i + 3] = 255; continue; }
             const gray = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
-            const bw = gray < 128 ? 0 : 255;
-            d[i] = bw; d[i + 1] = bw; d[i + 2] = bw;
+            const bw = gray < 200 ? 0 : 255;
+            d[i] = bw; d[i + 1] = bw; d[i + 2] = bw; d[i + 3] = 255;
         }
         ctx2.putImageData(imgData, 0, 0);
         etiquetaLogoImg = c;
@@ -3048,8 +3050,8 @@ function dibujarEtiquetaPreview() {
     ];
 
     const startX = 100, startY = 400;
-    const colW = 900, rowH = 180;
-    const lineW = 750;
+    const colW = 900, rowH = 200;
+    const boxW = 780, boxH = 65;
 
     fields.forEach(f => {
         const x = startX + f.col * colW;
@@ -3060,17 +3062,26 @@ function dibujarEtiquetaPreview() {
         ctx.font = 'italic 38px Inter, sans-serif';
         ctx.fillText(f.label, x, y);
 
-        // Value
-        ctx.font = 'bold 42px Inter, sans-serif';
-        ctx.fillText(f.value || '', x + 10, y + 60);
-
-        // Underline
+        // Rounded rectangle box
+        const bx = x, by = y + 15, br = 12;
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(x, y + 72);
-        ctx.lineTo(x + lineW, y + 72);
+        ctx.moveTo(bx + br, by);
+        ctx.lineTo(bx + boxW - br, by);
+        ctx.quadraticCurveTo(bx + boxW, by, bx + boxW, by + br);
+        ctx.lineTo(bx + boxW, by + boxH - br);
+        ctx.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - br, by + boxH);
+        ctx.lineTo(bx + br, by + boxH);
+        ctx.quadraticCurveTo(bx, by + boxH, bx, by + boxH - br);
+        ctx.lineTo(bx, by + br);
+        ctx.quadraticCurveTo(bx, by, bx + br, by);
+        ctx.closePath();
         ctx.stroke();
+
+        // Value text inside box
+        ctx.font = 'bold 40px Inter, sans-serif';
+        ctx.fillText(f.value || '', bx + 15, by + boxH - 18);
     });
 
     // Contact bar (bottom)
@@ -3085,36 +3096,37 @@ function dibujarEtiquetaPreview() {
     ctx.lineTo(W - 100, contactY - 30);
     ctx.stroke();
 
-    // Phone icon (circle with phone)
+    // Phone icon (circle with phone symbol)
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(180, contactY + 20, 35, 0, Math.PI * 2);
+    ctx.arc(180, contactY + 20, 40, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.font = '30px sans-serif';
-    ctx.fillText('✆', 164, contactY + 32);
+    ctx.fillStyle = '#000';
+    ctx.font = '48px sans-serif';
+    ctx.fillText('✆', 156, contactY + 38);
     ctx.font = 'bold 42px Inter, sans-serif';
-    ctx.fillText('6181341056', 240, contactY + 35);
+    ctx.fillText('6181341056', 245, contactY + 35);
 
     // Email icon
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(1100, contactY + 20, 35, 0, Math.PI * 2);
+    ctx.arc(1100, contactY + 20, 40, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.font = '28px sans-serif';
-    ctx.fillText('✉', 1085, contactY + 30);
+    ctx.font = '44px sans-serif';
+    ctx.fillText('✉', 1078, contactY + 36);
     ctx.font = 'bold 38px Inter, sans-serif';
-    ctx.fillText('contacto@durtron.com', 1160, contactY + 35);
+    ctx.fillText('contacto@durtron.com', 1165, contactY + 35);
 
     // Web icon
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(2100, contactY + 20, 35, 0, Math.PI * 2);
+    ctx.arc(2100, contactY + 20, 40, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.font = '28px sans-serif';
-    ctx.fillText('⊕', 2086, contactY + 32);
+    ctx.font = '48px sans-serif';
+    ctx.fillText('⊕', 2078, contactY + 38);
     ctx.font = 'bold 38px Inter, sans-serif';
-    ctx.fillText('www.durtron.com', 2160, contactY + 35);
+    ctx.fillText('www.durtron.com', 2165, contactY + 35);
 }
 
 function descargarEtiquetaPNG() {
