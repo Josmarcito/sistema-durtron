@@ -121,6 +121,7 @@ async function loadDashboard() {
         document.getElementById('stat-no-facturado').textContent = money(d.ingreso_no_facturado);
         document.getElementById('stat-facturado').textContent = money(d.ingreso_facturado);
         document.getElementById('stat-total').textContent = money(d.ingreso_total);
+        document.getElementById('stat-utilidad').textContent = money(d.utilidad_bruta);
 
         renderPieChart(d);
         renderTopEquiposChart(d);
@@ -131,6 +132,7 @@ async function loadDashboard() {
         document.getElementById('stat-no-facturado').textContent = '$0.00';
         document.getElementById('stat-facturado').textContent = '$0.00';
         document.getElementById('stat-total').textContent = '$0.00';
+        document.getElementById('stat-utilidad').textContent = '$0.00';
     }
 }
 
@@ -144,21 +146,24 @@ function renderPieChart(d) {
 
     const noFact = d.ingreso_no_facturado || 0;
     const fact = d.ingreso_facturado || 0;
-    const total = noFact + fact;
+    const utilidad = d.utilidad_bruta || 0;
+    const total = noFact + fact + utilidad;
 
     ingresosChart = new Chart(ctx, {
         type: 'pie',
         data: {
-            labels: ['No Facturado', 'Facturado'],
+            labels: ['No Facturado', 'Facturado', 'Utilidad Bruta'],
             datasets: [{
-                data: [noFact, fact],
+                data: [noFact, fact, utilidad],
                 backgroundColor: [
                     'rgba(231, 76, 60, 0.85)',
-                    'rgba(52, 152, 219, 0.85)'
+                    'rgba(52, 152, 219, 0.85)',
+                    'rgba(243, 156, 18, 0.85)'
                 ],
                 borderColor: [
                     'rgba(231, 76, 60, 1)',
-                    'rgba(52, 152, 219, 1)'
+                    'rgba(52, 152, 219, 1)',
+                    'rgba(243, 156, 18, 1)'
                 ],
                 borderWidth: 2,
                 hoverOffset: 8
@@ -358,13 +363,13 @@ function renderCatalogo() {
         return;
     }
     tbody.innerHTML = equiposCatalogo.map(eq => `<tr>
-        <td><strong>${eq.codigo}</strong></td>
-        <td>${eq.nombre}</td>
+        <td><strong>${eq.nombre}</strong></td>
         <td>${eq.marca || '-'}</td>
         <td>${eq.modelo || '-'}</td>
+        <td>${eq.version || '1.0'}</td>
         <td>${eq.categoria || '-'}</td>
         <td class="text-right">${money(eq.precio_lista)}</td>
-        <td class="text-right">${money(eq.precio_minimo)}</td>
+        <td class="text-right">${money(eq.precio_costo)}</td>
         <td>
             <div class="action-buttons">
                 <button class="btn btn-sm btn-primary" onclick="editarEquipo(${eq.id})">Editar</button>
@@ -412,12 +417,10 @@ async function editarEquipo(eid) {
         if (eq.error) { notify(eq.error, 'error'); return; }
 
         document.getElementById('edit-eq-id').value = eq.id;
-        document.getElementById('edit-eq-codigo').value = eq.codigo || '';
         document.getElementById('edit-eq-nombre').value = eq.nombre || '';
         document.getElementById('edit-eq-marca').value = eq.marca || '';
         document.getElementById('edit-eq-modelo').value = eq.modelo || '';
         document.getElementById('edit-eq-precio-lista').value = eq.precio_lista || 0;
-        document.getElementById('edit-eq-precio-minimo').value = eq.precio_minimo || 0;
         document.getElementById('edit-eq-precio-costo').value = eq.precio_costo || 0;
         document.getElementById('edit-eq-potencia').value = eq.potencia_motor || '';
         document.getElementById('edit-eq-capacidad').value = eq.capacidad || '';
@@ -427,7 +430,16 @@ async function editarEquipo(eid) {
         document.getElementById('edit-eq-descripcion').value = eq.descripcion || '';
         document.getElementById('edit-eq-apertura').value = eq.apertura || '';
         document.getElementById('edit-eq-tamano-alimentacion').value = eq.tamano_alimentacion || '';
-        document.getElementById('edit-eq-fecha-fabricacion').value = eq.fecha_fabricacion ? eq.fecha_fabricacion.substring(0, 10) : '';
+
+        // Set version dropdown
+        const verSel = document.getElementById('edit-eq-version');
+        const currentVer = eq.version || '1.0';
+        const verNum = parseFloat(currentVer) || 1.0;
+        let verOptions = '';
+        for (let v = 1.0; v <= Math.max(verNum + 1, 5.0); v = Math.round((v + 0.1) * 10) / 10) {
+            verOptions += `<option value="${v.toFixed(1)}" ${v.toFixed(1) === currentVer ? 'selected' : ''}>${v.toFixed(1)}</option>`;
+        }
+        verSel.innerHTML = verOptions;
 
         // Set categoria
         const catSel = document.getElementById('edit-eq-categoria');
@@ -556,13 +568,12 @@ async function eliminarParteEquipo(pid) {
 async function guardarEdicionEquipo() {
     const eid = document.getElementById('edit-eq-id').value;
     const body = {
-        codigo: document.getElementById('edit-eq-codigo').value.trim(),
         nombre: document.getElementById('edit-eq-nombre').value.trim(),
         marca: document.getElementById('edit-eq-marca').value.trim(),
         modelo: document.getElementById('edit-eq-modelo').value.trim(),
+        version: document.getElementById('edit-eq-version').value,
         categoria: document.getElementById('edit-eq-categoria').value,
         precio_lista: parseFloat(document.getElementById('edit-eq-precio-lista').value) || 0,
-        precio_minimo: parseFloat(document.getElementById('edit-eq-precio-minimo').value) || 0,
         precio_costo: parseFloat(document.getElementById('edit-eq-precio-costo').value) || 0,
         potencia_motor: document.getElementById('edit-eq-potencia').value.trim(),
         capacidad: document.getElementById('edit-eq-capacidad').value.trim(),
@@ -571,11 +582,10 @@ async function guardarEdicionEquipo() {
         especificaciones: document.getElementById('edit-eq-especificaciones').value.trim(),
         descripcion: document.getElementById('edit-eq-descripcion').value.trim(),
         apertura: document.getElementById('edit-eq-apertura').value.trim(),
-        tamano_alimentacion: document.getElementById('edit-eq-tamano-alimentacion').value.trim(),
-        fecha_fabricacion: document.getElementById('edit-eq-fecha-fabricacion').value || null
+        tamano_alimentacion: document.getElementById('edit-eq-tamano-alimentacion').value.trim()
     };
-    if (!body.codigo || !body.nombre) {
-        notify('Codigo y Nombre son obligatorios', 'error'); return;
+    if (!body.nombre) {
+        notify('Nombre es obligatorio', 'error'); return;
     }
     try {
         const res = await fetch(`${API}/api/equipos/${eid}`, {
@@ -857,13 +867,12 @@ function setupForms() {
         e.preventDefault();
         try {
             const body = {
-                codigo: document.getElementById('cat-codigo').value,
                 nombre: document.getElementById('cat-nombre').value,
                 marca: document.getElementById('cat-marca').value,
                 modelo: document.getElementById('cat-modelo').value,
+                version: document.getElementById('cat-version').value || '1.0',
                 categoria: document.getElementById('cat-categoria').value,
                 precio_lista: parseFloat(document.getElementById('cat-precio-lista').value) || 0,
-                precio_minimo: parseFloat(document.getElementById('cat-precio-minimo').value) || 0,
                 precio_costo: parseFloat(document.getElementById('cat-precio-costo').value) || 0,
                 potencia_motor: document.getElementById('cat-potencia').value,
                 capacidad: document.getElementById('cat-capacidad').value,
@@ -872,8 +881,7 @@ function setupForms() {
                 especificaciones: document.getElementById('cat-especificaciones').value,
                 descripcion: document.getElementById('cat-descripcion').value,
                 apertura: document.getElementById('cat-apertura').value,
-                tamano_alimentacion: document.getElementById('cat-tamano-alimentacion').value,
-                fecha_fabricacion: document.getElementById('cat-fecha-fabricacion').value || null
+                tamano_alimentacion: document.getElementById('cat-tamano-alimentacion').value
             };
             const r = await fetch(`${API}/api/equipos`, {
                 method: 'POST',

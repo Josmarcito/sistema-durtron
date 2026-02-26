@@ -83,6 +83,10 @@
                         <div class="stat-value" style="color:#27ae60;" id="stat-total">$0</div>
                         <div class="stat-label">Ingreso Total</div>
                     </div>
+                    <div class="stat-card" style="border-color:#f39c12;">
+                        <div class="stat-value" style="color:#f39c12;" id="stat-utilidad">$0</div>
+                        <div class="stat-label">Utilidad Bruta</div>
+                    </div>
                 </div>
 
                 <div class="dashboard-charts">
@@ -151,10 +155,6 @@
                     <h3>Agregar Equipo al Catalogo</h3>
                     <form id="form-catalogo" class="form-grid">
                         <div class="form-group">
-                            <label for="cat-codigo">Codigo / ID *</label>
-                            <input type="text" id="cat-codigo" placeholder="Ej: JC150x250" required>
-                        </div>
-                        <div class="form-group">
                             <label for="cat-nombre">Nombre del Equipo *</label>
                             <input type="text" id="cat-nombre" placeholder="Quebradora de Mandibulas" required>
                         </div>
@@ -167,6 +167,10 @@
                             <input type="text" id="cat-modelo" placeholder="JC-150">
                         </div>
                         <div class="form-group">
+                            <label for="cat-version">Version</label>
+                            <input type="text" id="cat-version" placeholder="1.0" value="1.0">
+                        </div>
+                        <div class="form-group">
                             <label for="cat-categoria">Categoria</label>
                             <select id="cat-categoria">
                                 <option value="">Seleccionar...</option>
@@ -177,11 +181,7 @@
                             <input type="number" id="cat-precio-lista" step="0.01" min="0" required>
                         </div>
                         <div class="form-group">
-                            <label for="cat-precio-minimo">Precio Minimo *</label>
-                            <input type="number" id="cat-precio-minimo" step="0.01" min="0" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="cat-precio-costo">Precio de Costo</label>
+                            <label for="cat-precio-costo">Costo de Fabricacion</label>
                             <input type="number" id="cat-precio-costo" step="0.01" min="0">
                         </div>
                         <div class="form-group">
@@ -208,10 +208,6 @@
                             <label for="cat-tamano-alimentacion">Tamaño Alimentación</label>
                             <input type="text" id="cat-tamano-alimentacion" placeholder='4"'>
                         </div>
-                        <div class="form-group">
-                            <label for="cat-fecha-fabricacion">Fecha de Fabricación</label>
-                            <input type="date" id="cat-fecha-fabricacion">
-                        </div>
                         <div class="form-group full-width">
                             <label for="cat-especificaciones">Especificaciones</label>
                             <textarea id="cat-especificaciones" rows="3"
@@ -234,13 +230,13 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Codigo</th>
                                     <th>Nombre</th>
                                     <th>Marca</th>
                                     <th>Modelo</th>
+                                    <th>Version</th>
                                     <th>Categoria</th>
                                     <th>Precio Lista</th>
-                                    <th>Precio Min</th>
+                                    <th>Costo Fab.</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
@@ -265,10 +261,6 @@
                         <form id="form-editar-equipo" class="form-grid">
                             <input type="hidden" id="edit-eq-id">
                             <div class="form-group">
-                                <label for="edit-eq-codigo">Codigo / ID *</label>
-                                <input type="text" id="edit-eq-codigo" required>
-                            </div>
-                            <div class="form-group">
                                 <label for="edit-eq-nombre">Nombre del Equipo *</label>
                                 <input type="text" id="edit-eq-nombre" required>
                             </div>
@@ -281,6 +273,12 @@
                                 <input type="text" id="edit-eq-modelo">
                             </div>
                             <div class="form-group">
+                                <label for="edit-eq-version">Version</label>
+                                <select id="edit-eq-version">
+                                    <option value="1.0">1.0</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
                                 <label for="edit-eq-categoria">Categoria</label>
                                 <select id="edit-eq-categoria">
                                     <option value="">Seleccionar...</option>
@@ -291,11 +289,7 @@
                                 <input type="number" id="edit-eq-precio-lista" step="0.01" min="0" required>
                             </div>
                             <div class="form-group">
-                                <label for="edit-eq-precio-minimo">Precio Minimo *</label>
-                                <input type="number" id="edit-eq-precio-minimo" step="0.01" min="0" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="edit-eq-precio-costo">Precio de Costo</label>
+                                <label for="edit-eq-precio-costo">Costo de Fabricacion</label>
                                 <input type="number" id="edit-eq-precio-costo" step="0.01" min="0">
                             </div>
                             <div class="form-group">
@@ -321,10 +315,6 @@
                             <div class="form-group">
                                 <label for="edit-eq-tamano-alimentacion">Tamaño Alimentación</label>
                                 <input type="text" id="edit-eq-tamano-alimentacion" placeholder='4"'>
-                            </div>
-                            <div class="form-group">
-                                <label for="edit-eq-fecha-fabricacion">Fecha de Fabricación</label>
-                                <input type="date" id="edit-eq-fecha-fabricacion">
                             </div>
                             <div class="form-group full-width">
                                 <label for="edit-eq-especificaciones">Especificaciones</label>

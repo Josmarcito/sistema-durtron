@@ -225,6 +225,14 @@ def init_db():
     ''')
     print("  OK tabla 'requisicion_items'")
 
+    # Migration: add version column to equipos
+    for col, tipo in [('version', "VARCHAR(20) DEFAULT '1.0'")]:
+        try:
+            cursor.execute(f"ALTER TABLE equipos ADD COLUMN IF NOT EXISTS {col} {tipo}")
+        except Exception:
+            pass
+    print("  OK migracion 'equipos.version'")
+
     # Tabla equipo_partes (partes tecnicas por maquina)
     print("Creando tabla 'equipo_partes'...")
     cursor.execute('''

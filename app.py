@@ -283,20 +283,21 @@ def get_dashboard():
         cur.execute('SELECT COUNT(*) as total FROM inventario')
         total_inventario = cur.fetchone()['total']
 
-        # Ingresos: No Facturado, Facturado, Total
-        # No facturado = precio_venta donde facturado=false
-        # Facturado = precio_venta * 1.16 donde facturado=true (incluye IVA 16%)
+        # Ingresos: No Facturado, Facturado, Total + Utilidad Bruta
         cur.execute('''
             SELECT
                 COALESCE(SUM(CASE WHEN facturado=false THEN precio_venta ELSE 0 END),0) as no_facturado,
                 COALESCE(SUM(CASE WHEN facturado=true THEN precio_venta * 1.16 ELSE 0 END),0) as facturado,
+                COALESCE(SUM(v.precio_venta - COALESCE(e.precio_costo,0)),0) as utilidad,
                 COUNT(*) as total_ventas
-            FROM ventas
+            FROM ventas v
+            LEFT JOIN equipos e ON v.equipo_id = e.id
         ''')
         row = cur.fetchone()
         ingreso_no_facturado = round(float(row['no_facturado']), 2)
         ingreso_facturado = round(float(row['facturado']), 2)
         ingreso_total = round(ingreso_no_facturado + ingreso_facturado, 2)
+        utilidad_bruta = round(float(row['utilidad']), 2)
         total_ventas = row['total_ventas']
 
         # Top equipos más vendidos (porcentaje por volumen de venta)
@@ -381,6 +382,7 @@ def get_dashboard():
             'ingreso_no_facturado': ingreso_no_facturado,
             'ingreso_facturado': ingreso_facturado,
             'ingreso_total': ingreso_total,
+            'utilidad_bruta': utilidad_bruta,
             'total_ventas': total_ventas,
             'top_equipos': top_equipos,
             'historial_anual': historial_anual
@@ -409,10 +411,13 @@ def create_equipo():
         d = request.json
         if not d:
             return jsonify({'error': 'No se recibieron datos'}), 400
-        codigo = (d.get('codigo') or '').strip()
         nombre = (d.get('nombre') or '').strip()
-        if not codigo or not nombre:
-            return jsonify({'error': 'Codigo y Nombre son obligatorios'}), 400
+        modelo = (d.get('modelo') or '').strip()
+        if not nombre:
+            return jsonify({'error': 'Nombre es obligatorio'}), 400
+
+        # Auto-generate codigo from modelo or nombre
+        codigo = modelo if modelo else nombre[:50]
 
         def to_float(val, default=0):
             try:
@@ -425,18 +430,18 @@ def create_equipo():
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO equipos (codigo, nombre, marca, modelo, descripcion, categoria,
-                precio_lista, precio_minimo, precio_costo,
+                precio_lista, precio_costo, version,
                 potencia_motor, capacidad, dimensiones, peso, especificaciones,
-                apertura, tamano_alimentacion, fecha_fabricacion)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                apertura, tamano_alimentacion)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
-            codigo, nombre, d.get('marca') or '', d.get('modelo') or '',
+            codigo, nombre, d.get('marca') or '', modelo,
             d.get('descripcion') or '', d.get('categoria') or '',
-            to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
+            to_float(d.get('precio_lista')), to_float(d.get('precio_costo')),
+            d.get('version') or '1.0',
             d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
             d.get('peso') or '', d.get('especificaciones') or '',
-            d.get('apertura') or '', d.get('tamano_alimentacion') or '',
-            d.get('fecha_fabricacion') or None
+            d.get('apertura') or '', d.get('tamano_alimentacion') or ''
         ))
         eid = cur.fetchone()['id']
         conn.commit()
@@ -489,24 +494,28 @@ def update_equipo(eid):
             except (ValueError, TypeError):
                 return default
 
+        modelo = (d.get('modelo') or '').strip()
+        nombre = (d.get('nombre') or '').strip()
+        codigo = modelo if modelo else nombre[:50]
+
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
             UPDATE equipos SET
                 codigo=%s, nombre=%s, marca=%s, modelo=%s, descripcion=%s, categoria=%s,
-                precio_lista=%s, precio_minimo=%s, precio_costo=%s,
+                precio_lista=%s, precio_costo=%s, version=%s,
                 potencia_motor=%s, capacidad=%s, dimensiones=%s, peso=%s, especificaciones=%s,
-                apertura=%s, tamano_alimentacion=%s, fecha_fabricacion=%s
+                apertura=%s, tamano_alimentacion=%s
             WHERE id=%s
         ''', (
-            (d.get('codigo') or '').strip(), (d.get('nombre') or '').strip(),
-            d.get('marca') or '', d.get('modelo') or '',
+            codigo, nombre,
+            d.get('marca') or '', modelo,
             d.get('descripcion') or '', d.get('categoria') or '',
-            to_float(d.get('precio_lista')), to_float(d.get('precio_minimo')), to_float(d.get('precio_costo')),
+            to_float(d.get('precio_lista')), to_float(d.get('precio_costo')),
+            d.get('version') or '1.0',
             d.get('potencia_motor') or '', d.get('capacidad') or '', d.get('dimensiones') or '',
             d.get('peso') or '', d.get('especificaciones') or '',
             d.get('apertura') or '', d.get('tamano_alimentacion') or '',
-            d.get('fecha_fabricacion') or None,
             eid
         ))
         conn.commit()
