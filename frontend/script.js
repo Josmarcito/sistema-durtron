@@ -2975,63 +2975,58 @@ function dibujarEtiquetaPreview() {
     const ctx = canvas.getContext('2d');
     const W = 3000, H = 1500;
 
-    // Clear
+    // Clear - white background, no border
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, W, H);
 
-    // Border
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(20, 20, W - 40, H - 40);
-
-    // Draw logo (top-left)
+    // Draw logo (top-left) - bigger
     if (etiquetaLogoImg) {
-        const logoH = 220;
+        const logoH = 300;
         const logoW = (etiquetaLogoImg.width / etiquetaLogoImg.height) * logoH;
-        ctx.drawImage(etiquetaLogoImg, 100, 70, logoW, logoH);
+        ctx.drawImage(etiquetaLogoImg, 80, 60, logoW, logoH);
     }
 
     // Quality badge (top-right) - draw checkmark circle
-    const badgeX = 2100, badgeY = 100;
+    const badgeX = 2100, badgeY = 80;
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(badgeX, badgeY + 25, 30, 0, Math.PI * 2);
-    ctx.stroke();
-    // Checkmark inside
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(badgeX - 12, badgeY + 25);
-    ctx.lineTo(badgeX - 2, badgeY + 35);
-    ctx.lineTo(badgeX + 15, badgeY + 12);
+    ctx.arc(badgeX, badgeY + 30, 38, 0, Math.PI * 2);
+    ctx.stroke();
+    // Checkmark inside
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(badgeX - 15, badgeY + 30);
+    ctx.lineTo(badgeX - 3, badgeY + 42);
+    ctx.lineTo(badgeX + 18, badgeY + 14);
     ctx.stroke();
     // Scalloped edge (decorative dots)
+    ctx.fillStyle = '#000';
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
         ctx.beginPath();
-        ctx.arc(badgeX + Math.cos(a) * 38, badgeY + 25 + Math.sin(a) * 38, 6, 0, Math.PI * 2);
+        ctx.arc(badgeX + Math.cos(a) * 48, badgeY + 30 + Math.sin(a) * 48, 8, 0, Math.PI * 2);
         ctx.fill();
     }
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 40px Inter, sans-serif';
-    ctx.fillText('Calidad Industrial', badgeX + 55, badgeY + 35);
+    ctx.font = 'bold 48px Inter, sans-serif';
+    ctx.fillText('Calidad Industrial', badgeX + 70, badgeY + 45);
 
     // Pin icon + location
-    const locY = badgeY + 100;
+    const locY = badgeY + 120;
     ctx.beginPath();
-    ctx.arc(badgeX + 5, locY - 10, 20, 0, Math.PI * 2);
+    ctx.arc(badgeX + 5, locY - 10, 24, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(badgeX - 15, locY);
-    ctx.lineTo(badgeX + 5, locY + 30);
-    ctx.lineTo(badgeX + 25, locY);
+    ctx.moveTo(badgeX - 18, locY);
+    ctx.lineTo(badgeX + 5, locY + 35);
+    ctx.lineTo(badgeX + 28, locY);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(badgeX + 5, locY - 10, 8, 0, Math.PI * 2);
+    ctx.arc(badgeX + 5, locY - 10, 10, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 40px Inter, sans-serif';
-    ctx.fillText('Durtron Planta 1 Durango', badgeX + 55, locY + 10);
+    ctx.font = 'bold 48px Inter, sans-serif';
+    ctx.fillText('Durtron Planta 1 Durango', badgeX + 70, locY + 15);
 
     // Get form data
     const data = getEtiquetaDataStandalone();
@@ -3049,9 +3044,9 @@ function dibujarEtiquetaPreview() {
         { label: 'Número de Serie', value: data.numero_serie, col: 2, row: 2 },
     ];
 
-    const startX = 100, startY = 400;
-    const colW = 900, rowH = 200;
-    const boxW = 780, boxH = 65;
+    const startX = 80, startY = 450;
+    const colW = 940, rowH = 240;
+    const boxW = 830, boxH = 80;
 
     fields.forEach(f => {
         const x = startX + f.col * colW;
@@ -3059,11 +3054,11 @@ function dibujarEtiquetaPreview() {
 
         // Label (italic)
         ctx.fillStyle = '#000';
-        ctx.font = 'italic 38px Inter, sans-serif';
+        ctx.font = 'italic 44px Inter, sans-serif';
         ctx.fillText(f.label, x, y);
 
         // Rounded rectangle box
-        const bx = x, by = y + 15, br = 12;
+        const bx = x, by = y + 18, br = 14;
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -3080,53 +3075,53 @@ function dibujarEtiquetaPreview() {
         ctx.stroke();
 
         // Value text inside box
-        ctx.font = 'bold 40px Inter, sans-serif';
-        ctx.fillText(f.value || '', bx + 15, by + boxH - 18);
+        ctx.font = 'bold 46px Inter, sans-serif';
+        ctx.fillText(f.value || '', bx + 18, by + boxH - 20);
     });
 
-    // Contact bar (bottom)
-    const contactY = H - 130;
+    // Contact bar (bottom) - tight to content
+    const contactY = startY + 3 * rowH + 60;
     ctx.fillStyle = '#000';
 
     // Divider line
-    ctx.strokeStyle = '#ccc';
+    ctx.strokeStyle = '#aaa';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(100, contactY - 30);
-    ctx.lineTo(W - 100, contactY - 30);
+    ctx.moveTo(80, contactY - 20);
+    ctx.lineTo(W - 80, contactY - 20);
     ctx.stroke();
 
-    // Phone icon (circle with phone symbol)
+    // Phone icon
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(180, contactY + 20, 40, 0, Math.PI * 2);
+    ctx.arc(160, contactY + 25, 42, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = '#000';
-    ctx.font = '48px sans-serif';
-    ctx.fillText('✆', 156, contactY + 38);
-    ctx.font = 'bold 42px Inter, sans-serif';
-    ctx.fillText('6181341056', 245, contactY + 35);
+    ctx.font = '52px sans-serif';
+    ctx.fillText('✆', 134, contactY + 44);
+    ctx.font = 'bold 48px Inter, sans-serif';
+    ctx.fillText('6181341056', 230, contactY + 42);
 
     // Email icon
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(1100, contactY + 20, 40, 0, Math.PI * 2);
+    ctx.arc(1100, contactY + 25, 42, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.font = '44px sans-serif';
-    ctx.fillText('✉', 1078, contactY + 36);
-    ctx.font = 'bold 38px Inter, sans-serif';
-    ctx.fillText('contacto@durtron.com', 1165, contactY + 35);
+    ctx.font = '50px sans-serif';
+    ctx.fillText('✉', 1075, contactY + 42);
+    ctx.font = 'bold 44px Inter, sans-serif';
+    ctx.fillText('contacto@durtron.com', 1170, contactY + 42);
 
     // Web icon
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(2100, contactY + 20, 40, 0, Math.PI * 2);
+    ctx.arc(2100, contactY + 25, 42, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.font = '48px sans-serif';
-    ctx.fillText('⊕', 2078, contactY + 38);
-    ctx.font = 'bold 38px Inter, sans-serif';
-    ctx.fillText('www.durtron.com', 2165, contactY + 35);
+    ctx.font = '52px sans-serif';
+    ctx.fillText('⊕', 2076, contactY + 44);
+    ctx.font = 'bold 44px Inter, sans-serif';
+    ctx.fillText('www.durtron.com', 2170, contactY + 42);
 }
 
 function descargarEtiquetaPNG() {
