@@ -232,7 +232,8 @@ def init_db():
     for col, tipo in [('no_control', "VARCHAR(30)"),
                       ('area', "VARCHAR(100) DEFAULT 'Departamento de Ingeniería'"),
                       ('revisado_por', 'VARCHAR(100)'),
-                      ('requerido_por', 'VARCHAR(100)')]:
+                      ('requerido_por', 'VARCHAR(100)'),
+                      ('numero_serie', 'VARCHAR(100)')]:
         try:
             cursor.execute(f"ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS {col} {tipo}")
         except Exception:

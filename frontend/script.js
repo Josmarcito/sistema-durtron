@@ -1315,9 +1315,10 @@ function setupForms() {
             // Validate at least one valid provider logic? No, allowing free text.
 
             const body = {
-                inventario_id: null, // Always null for generic req
+                inventario_id: null,
                 equipo_nombre: document.getElementById('req-equipo').selectedOptions[0]?.text || '',
                 no_control: document.getElementById('req-no-control').value.trim(),
+                numero_serie: document.getElementById('req-numero-serie').value.trim(),
                 area: document.getElementById('req-area').value.trim(),
                 proveedor_id: mainProvId || null,
                 notas: document.getElementById('req-notas').value.trim(),
@@ -2159,6 +2160,7 @@ async function verRequisicion(rid) {
                     <p><strong>Folio:</strong> ${r.folio}</p>
                     <p><strong>No. Control:</strong> ${r.no_control || '-'}</p>
                     <p><strong>Proyecto:</strong> ${r.equipo_nombre || '-'}</p>
+                    ${r.numero_serie ? `<p><strong>N/Serie:</strong> <span style="background:linear-gradient(135deg,#F47427,#e65100); color:#fff; padding:2px 10px; border-radius:4px; font-weight:700; letter-spacing:1px;">${r.numero_serie}</span></p>` : ''}
                 </div>
                 <div>
                     <p><strong>Área:</strong> ${r.area || '-'}</p>
@@ -2244,6 +2246,17 @@ async function verRequisicion(rid) {
         }
         sendActionsHtml += '</div>';
 
+        // Consolidated PDF button
+        const consolidatedPdfHtml = `
+            <div style="background:rgba(210,21,43,0.1); padding:12px; border-radius:8px; margin-top:10px; border:1px solid rgba(210,21,43,0.3); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong style="color:#D2152B;">PDF Consolidado</strong>
+                    <small style="color:#888; display:block;">Todas las partidas con columnas P.Unit / IVA / Total para llenar a mano</small>
+                </div>
+                <button class="btn" style="background:#D2152B; color:#fff;" onclick="imprimirReqConsolidado(${r.id})">Generar PDF Consolidado</button>
+            </div>
+        `;
+
         // General Actions
         const generalActions = `
             <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap; justify-content: flex-end; align-items:center;">
@@ -2257,7 +2270,7 @@ async function verRequisicion(rid) {
             </div>
         `;
 
-        body.innerHTML = headerInfo + itemsHtml + sendActionsHtml + generalActions;
+        body.innerHTML = headerInfo + itemsHtml + sendActionsHtml + consolidatedPdfHtml + generalActions;
 
     } catch (e) {
         body.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
@@ -2335,15 +2348,11 @@ async function imprimirReqProveedor(rid, provName) {
         const proyecto = reqData.equipo_nombre || '-';
         const area = reqData.area || 'Departamento de Ingeniería';
         const noControl = reqData.no_control || '-';
+        const numSerie = reqData.numero_serie || '-';
         const emitido = reqData.emitido_por || '-';
         const aprobado = reqData.aprobado_por || '-';
         const revisado = reqData.revisado_por || '-';
         const notas = reqData.notas || '';
-
-        // Calculate totals
-        let subtotalGen = 0;
-        let ivaGen = 0;
-        let totalGen = 0;
 
         const itemsHtml = provItems.map((it, i) => {
             return `
@@ -2353,9 +2362,6 @@ async function imprimirReqProveedor(rid, provName) {
                     <td><small>${it.comentario || ''}</small></td>
                     <td style="text-align:center">${parseFloat(it.cantidad) || 0}</td>
                     <td style="text-align:center">${it.unidad || 'pza'}</td>
-                    <td style="text-align:right"></td>
-                    <td style="text-align:center"></td>
-                    <td style="text-align:right"></td>
                 </tr>
             `;
         }).join('');
@@ -2381,9 +2387,7 @@ async function imprimirReqProveedor(rid, provName) {
                 .req-pdf-table th { background: #1a1a2e; color: white; padding: 0.6rem 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
                 .req-pdf-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.82rem; }
                 .req-pdf-table tr:nth-child(even) { background: #f8f9fa; }
-                .req-pdf-totals { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 1.5rem; }
-                .req-total-row { display: flex; justify-content: space-between; width: 280px; padding: 0.4rem 0; font-size: 0.9rem; border-bottom: 1px solid #eee; }
-                .req-total-final { border-top: 2px solid #1a1a2e; border-bottom: none; padding-top: 0.6rem; font-size: 1.1rem; color: #D2152B; }
+                .serie-badge { display: inline-block; background: linear-gradient(135deg, #F47427, #e65100); color: #fff; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 0.85rem; letter-spacing: 1px; margin-top: 5px; }
                 .req-pdf-notas { background: #fffbeb; border-left: 3px solid #F47427; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; border-radius: 0 6px 6px 0; }
                 .req-pdf-notas h4 { color: #F47427; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.3rem; }
                 .req-pdf-footer { text-align: center; font-size: 0.75rem; color: #888; padding-top: 1rem; border-top: 1px solid #eee; }
@@ -2417,6 +2421,7 @@ async function imprimirReqProveedor(rid, provName) {
                         <p><strong>Proyecto:</strong> ${proyecto}</p>
                         <p><strong>Área:</strong> ${area}</p>
                         <p><strong>No. Control:</strong> ${noControl}</p>
+                        ${numSerie !== '-' ? `<p><strong>N/Serie:</strong> <span class="serie-badge">${numSerie}</span></p>` : ''}
                     </div>
                     <div class="req-pdf-info-block">
                         <h4>Autorizaciones</h4>
@@ -2440,24 +2445,10 @@ async function imprimirReqProveedor(rid, provName) {
                             <th>Comentarios</th>
                             <th style="width:55px">Cant.</th>
                             <th style="width:55px">Unidad</th>
-                            <th style="width:90px">P. Unit.</th>
-                            <th style="width:45px">IVA</th>
-                            <th style="width:100px">Total</th>
                         </tr>
                     </thead>
                     <tbody>${itemsHtml}</tbody>
                 </table>
-
-                <div class="req-pdf-totals">
-                    <div class="req-total-row">
-                        <span>Subtotal:</span>
-                        <strong></strong>
-                    </div>
-                    <div class="req-total-row req-total-final">
-                        <span>TOTAL:</span>
-                        <strong></strong>
-                    </div>
-                </div>
 
                 ${notas ? `<div class="req-pdf-notas"><h4>Notas</h4><p>${notas}</p></div>` : ''}
 
@@ -2482,6 +2473,164 @@ async function imprimirReqProveedor(rid, provName) {
 
     } catch (e) {
         notify('Error al generar PDF: ' + e.message, 'error');
+    }
+}
+
+// ==================== PDF CONSOLIDADO (TODAS LAS PARTIDAS) ====================
+async function imprimirReqConsolidado(rid) {
+    try {
+        const reqRes = await fetch(`${API}/api/requisiciones/${rid}`);
+        const reqData = await reqRes.json();
+        const allItems = reqData.items || [];
+
+        if (allItems.length === 0) {
+            notify('No hay partidas en esta requisicion', 'error');
+            return;
+        }
+
+        const folio = reqData.folio || '-';
+        const fecha = new Date(reqData.fecha_creacion).toLocaleDateString('es-MX');
+        const proyecto = reqData.equipo_nombre || '-';
+        const area = reqData.area || 'Departamento de Ingeniería';
+        const noControl = reqData.no_control || '-';
+        const numSerie = reqData.numero_serie || '-';
+        const emitido = reqData.emitido_por || '-';
+        const aprobado = reqData.aprobado_por || '-';
+        const revisado = reqData.revisado_por || '-';
+        const notas = reqData.notas || '';
+
+        const itemsHtml = allItems.map((it, i) => {
+            return `
+                <tr>
+                    <td style="text-align:center">${i + 1}</td>
+                    <td>${it.componente || ''}</td>
+                    <td><small>${it.proveedor_nombre || '-'}</small></td>
+                    <td><small>${it.comentario || ''}</small></td>
+                    <td style="text-align:center">${parseFloat(it.cantidad) || 0}</td>
+                    <td style="text-align:center">${it.unidad || 'pza'}</td>
+                    <td style="text-align:right"></td>
+                    <td style="text-align:center"></td>
+                    <td style="text-align:right"></td>
+                </tr>
+            `;
+        }).join('');
+
+        const htmlContent = `
+            <html><head>
+            <title>Requisicion Consolidada ${folio}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; padding: 0; color: #333; }
+                .req-pdf { max-width: 850px; margin: 0 auto; padding: 2rem; }
+                .req-pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+                .req-pdf-logo h1 { font-size: 2.2rem; font-weight: 800; color: #D2152B; letter-spacing: 2px; }
+                .req-pdf-logo span { color: #F47427; font-size: 0.85rem; font-weight: 600; }
+                .req-pdf-folio { text-align: right; font-size: 0.85rem; color: #555; }
+                .folio-number { font-size: 1.2rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.3rem; }
+                .req-pdf-divider { height: 4px; background: linear-gradient(90deg, #D2152B, #F47427); border-radius: 2px; margin-bottom: 1.5rem; }
+                .req-pdf-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; }
+                .req-pdf-info-block h4 { color: #D2152B; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
+                .req-pdf-info-block p { font-size: 0.85rem; line-height: 1.6; }
+                .req-pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+                .req-pdf-table th { background: #1a1a2e; color: white; padding: 0.6rem 0.8rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+                .req-pdf-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #eee; font-size: 0.8rem; }
+                .req-pdf-table tr:nth-child(even) { background: #f8f9fa; }
+                .serie-badge { display: inline-block; background: linear-gradient(135deg, #F47427, #e65100); color: #fff; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 0.85rem; letter-spacing: 1px; margin-top: 5px; }
+                .req-pdf-totals { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 1.5rem; }
+                .req-total-row { display: flex; justify-content: space-between; width: 280px; padding: 0.4rem 0; font-size: 0.9rem; border-bottom: 1px solid #eee; }
+                .req-total-final { border-top: 2px solid #1a1a2e; border-bottom: none; padding-top: 0.6rem; font-size: 1.1rem; color: #D2152B; }
+                .req-pdf-notas { background: #fffbeb; border-left: 3px solid #F47427; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; border-radius: 0 6px 6px 0; }
+                .req-pdf-notas h4 { color: #F47427; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.3rem; }
+                .req-pdf-footer { text-align: center; font-size: 0.75rem; color: #888; padding-top: 1rem; border-top: 1px solid #eee; }
+                .label-consolidado { display: inline-block; background: #D2152B; color: #fff; padding: 2px 10px; border-radius: 3px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+                @media print { body { padding: 0; } .req-pdf { padding: 1rem; } }
+            </style>
+            </head><body>
+            <div class="req-pdf">
+                <div class="req-pdf-header">
+                    <div class="req-pdf-logo">
+                        <h1>DURTRON</h1>
+                        <span>Innovacion Industrial</span>
+                    </div>
+                    <div class="req-pdf-folio">
+                        <div class="folio-number">${folio}</div>
+                        <div><span class="label-consolidado">CONSOLIDADO</span></div>
+                        <div>REQUISICION DE MATERIALES</div>
+                        <div>Fecha: ${fecha}</div>
+                    </div>
+                </div>
+
+                <div class="req-pdf-divider"></div>
+
+                <div class="req-pdf-info-grid">
+                    <div class="req-pdf-info-block">
+                        <h4>Datos del Proyecto</h4>
+                        <p><strong>Proyecto:</strong> ${proyecto}</p>
+                        <p><strong>Área:</strong> ${area}</p>
+                        <p><strong>No. Control:</strong> ${noControl}</p>
+                        ${numSerie !== '-' ? `<p><strong>N/Serie:</strong> <span class="serie-badge">${numSerie}</span></p>` : ''}
+                    </div>
+                    <div class="req-pdf-info-block">
+                        <h4>Autorizaciones</h4>
+                        <p><strong>Emitido por:</strong> ${emitido}</p>
+                        <p><strong>Aprobado por:</strong> ${aprobado}</p>
+                        <p><strong>Revisado por:</strong> ${revisado}</p>
+                    </div>
+                    <div class="req-pdf-info-block">
+                        <h4>Datos de DURTRON</h4>
+                        <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                        <p>Av. del Sol #329, Durango, Dgo.</p>
+                        <p>Tel: 618 134 1056</p>
+                    </div>
+                </div>
+
+                <table class="req-pdf-table">
+                    <thead>
+                        <tr>
+                            <th style="width:30px">#</th>
+                            <th>Componente</th>
+                            <th>Proveedor</th>
+                            <th>Comentarios</th>
+                            <th style="width:45px">Cant.</th>
+                            <th style="width:50px">Unidad</th>
+                            <th style="width:90px">P. Unit.</th>
+                            <th style="width:45px">IVA</th>
+                            <th style="width:100px">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemsHtml}</tbody>
+                </table>
+
+                <div class="req-pdf-totals">
+                    <div class="req-total-row">
+                        <span>Subtotal:</span>
+                        <strong></strong>
+                    </div>
+                    <div class="req-total-row req-total-final">
+                        <span>TOTAL:</span>
+                        <strong></strong>
+                    </div>
+                </div>
+
+                ${notas ? `<div class="req-pdf-notas"><h4>Notas</h4><p>${notas}</p></div>` : ''}
+
+                <div class="req-pdf-footer">
+                    <p><strong>DURTRON - Innovacion Industrial</strong></p>
+                    <p>Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056</p>
+                    <p style="margin-top:0.5rem; font-style:italic;">Documento interno. Llenar precios y totales segun cotizaciones recibidas.</p>
+                </div>
+            </div>
+            <script>setTimeout(()=>{window.print();},500)<\/script>
+            </body></html>
+        `;
+
+        const win = window.open('', '_blank');
+        win.document.write(htmlContent);
+        win.document.close();
+
+    } catch (e) {
+        notify('Error al generar PDF consolidado: ' + e.message, 'error');
     }
 }
 

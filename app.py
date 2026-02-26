@@ -1575,14 +1575,15 @@ def create_requisicion():
         folio = f"REQ-{anio}-{cnt+1:04d}"
         # Insertar requisicion
         cur.execute('''
-            INSERT INTO requisiciones (folio, inventario_id, proveedor_id, equipo_nombre, no_control, area, revisado_por, requerido_por, notas, emitido_por, aprobado_por)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+            INSERT INTO requisiciones (folio, inventario_id, proveedor_id, equipo_nombre, no_control, area, revisado_por, requerido_por, notas, emitido_por, aprobado_por, numero_serie)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (folio, d.get('inventario_id'), d.get('proveedor_id'),
               d.get('equipo_nombre',''), d.get('no_control',''), 
               d.get('area','Departamento de Ingeniería'),
               d.get('revisado_por',''), d.get('requerido_por',''),
               d.get('notas',''),
-              d.get('emitido_por',''), d.get('aprobado_por','')))
+              d.get('emitido_por',''), d.get('aprobado_por',''),
+              d.get('numero_serie','')))
         rid = cur.fetchone()['id']
         # Insertar items
         items = d.get('items', [])
@@ -2301,10 +2302,11 @@ try:
             fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    _cur.execute("ALTER TABLE requisiciones ADD COLUMN IF NOT EXISTS numero_serie VARCHAR(100)")
     _conn.commit()
     _cur.close()
     _conn.close()
-    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos, vendedores_catalogo")
+    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos, vendedores_catalogo, req numero_serie")
 except Exception as _e:
     print(f"Migration warning: {_e}")
 
