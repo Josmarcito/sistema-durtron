@@ -920,7 +920,6 @@ function setupForms() {
         try {
             const body = {
                 equipo_id: parseInt(document.getElementById('inv-equipo').value),
-                numero_serie: document.getElementById('inv-serie').value,
                 estado: document.getElementById('inv-estado').value,
                 observaciones: document.getElementById('inv-obs').value
             };
