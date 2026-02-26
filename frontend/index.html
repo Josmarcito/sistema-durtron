@@ -49,6 +49,9 @@
             <button class="nav-btn" data-section="requisiciones">
                 Requisiciones
             </button>
+            <button class="nav-btn" data-section="etiquetas">
+                Etiquetas
+            </button>
         </nav>
         <div class="sidebar-footer">
             <button class="btn-logout" onclick="cerrarSesion()">Cerrar sesion</button>
@@ -1010,6 +1013,88 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ ETIQUETAS ============ -->
+        <section id="etiquetas" class="section">
+            <h2>Generar Etiquetas</h2>
+            <p class="section-desc">Genera etiquetas de identificacion para equipos fabricados.</p>
+
+            <div class="card">
+                <h3>Generar Etiqueta de Equipo</h3>
+                <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Selecciona un equipo del catalogo para
+                    llenar automaticamente. El numero de serie se genera automaticamente.</p>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label><strong>Seleccionar Equipo del Catalogo</strong></label>
+                    <select id="etq-equipo-select-standalone" onchange="autoFillEtiquetaStandalone(this.value)">
+                        <option value="">-- Seleccionar equipo del catalogo --</option>
+                    </select>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Equipo</label>
+                        <input type="text" id="etq-equipo-s" placeholder="Nombre del equipo">
+                    </div>
+                    <div class="form-group">
+                        <label>Modelo</label>
+                        <input type="text" id="etq-modelo-s" placeholder="Modelo">
+                    </div>
+                    <div class="form-group">
+                        <label>Capacidad</label>
+                        <input type="text" id="etq-capacidad-s" placeholder="Ej: 500 Kg/hr">
+                    </div>
+                    <div class="form-group">
+                        <label>Potencia Motor</label>
+                        <input type="text" id="etq-potencia-s" placeholder="Ej: 15 HP">
+                    </div>
+                    <div class="form-group">
+                        <label>Apertura</label>
+                        <input type="text" id="etq-apertura-s" placeholder='Ej: 3/8"'>
+                    </div>
+                    <div class="form-group">
+                        <label>Tamano Alimentacion</label>
+                        <input type="text" id="etq-tamano-s" placeholder='Ej: 4"'>
+                    </div>
+                    <div class="form-group">
+                        <label>Peso del Equipo</label>
+                        <input type="text" id="etq-peso-s" placeholder="Ej: 1200 Kg">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Fabricacion</label>
+                        <input type="date" id="etq-fecha-fab-s">
+                    </div>
+                    <div class="form-group">
+                        <label>Numero de Serie <small style="color:#F47427;">(automatico)</small></label>
+                        <div style="display:flex; gap:5px; align-items:center;">
+                            <input type="text" id="etq-serie-s" placeholder="Se genera automaticamente" readonly
+                                style="background:rgba(244,116,39,0.1); border-color:#F47427; flex:1;">
+                            <button class="btn" onclick="resetLastSerial()"
+                                style="background:#D2152B; color:#fff; padding:6px 10px; font-size:0.75rem; white-space:nowrap;"
+                                title="Eliminar ultimo serial generado">Quitar</button>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    style="margin-top:10px; padding:10px; background:rgba(244,116,39,0.05); border-radius:6px; border:1px solid rgba(244,116,39,0.2);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <small style="color:#F47427;">Si generaste seriales de prueba, usa el boton "Quitar" para
+                            decrementar el contador, o haz clic en "Administrar" para ver/resetear todos los
+                            contadores.</small>
+                        <button class="btn" onclick="mostrarAdminSeriales()"
+                            style="background:rgba(244,116,39,0.2); color:#F47427; padding:5px 12px; font-size:0.75rem; white-space:nowrap;">Administrar</button>
+                    </div>
+                    <div id="admin-seriales-panel-s" style="display:none; margin-top:10px;"></div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="descargarEtiquetaStandalone()"
+                        style="background:#D2152B;">Generar PDF Etiqueta</button>
+                    <div class="form-group" style="flex:1; margin:0;">
+                        <label>Email destino</label>
+                        <input type="email" id="etq-email-s" placeholder="correo@ejemplo.com" style="margin:0;">
+                    </div>
+                    <button class="btn btn-success" onclick="enviarEtiquetaEmailStandalone()">Enviar Etiqueta</button>
                 </div>
             </div>
         </section>

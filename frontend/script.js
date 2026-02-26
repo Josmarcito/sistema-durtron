@@ -44,7 +44,8 @@ const sectionTitles = {
     vendedores: 'Vendedores',
     cotizaciones: 'Cotizaciones',
     proveedores: 'Proveedores',
-    requisiciones: 'Requisiciones'
+    requisiciones: 'Requisiciones',
+    etiquetas: 'Generar Etiquetas'
 };
 
 function toggleSidebar() {
@@ -71,6 +72,7 @@ function setupNav() {
             if (s === 'ventas') loadVentas();
             if (s === 'dashboard') loadDashboard();
             if (s === 'cotizaciones') { loadCotizaciones(); populateCotEquipoSelects(); }
+            if (s === 'etiquetas') populateEtiquetaStandaloneDropdown();
             if (s === 'proveedores') loadProveedores();
             if (s === 'requisiciones') { loadRequisiciones(); populateReqProveedorSelect(); populateReqEquipoSelect(); }
         });
@@ -2242,81 +2244,6 @@ async function verRequisicion(rid) {
         }
         sendActionsHtml += '</div>';
 
-        // Etiqueta Section — Equipment dropdown with auto-fill
-        let equipoOptions = '<option value="">-- Seleccionar equipo del catálogo --</option>';
-        equiposCatalogo.forEach(eq => {
-            equipoOptions += `<option value="${eq.id}">${eq.codigo} - ${eq.nombre}</option>`;
-        });
-
-        const etiquetaHtml = `
-            <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; margin-top:15px; border:1px solid rgba(255,255,255,0.1);">
-                <h4>Generar Etiqueta de Equipo</h4>
-                <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Selecciona un equipo del catálogo para llenar automáticamente. El número de serie se genera automáticamente.</p>
-                <div class="form-group" style="margin-bottom:12px;">
-                    <label><strong>Seleccionar Equipo del Catálogo</strong></label>
-                    <select id="etq-equipo-select" onchange="autoFillEtiqueta(this.value)" style="width:100%; padding:8px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:#fff;">
-                        ${equipoOptions}
-                    </select>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
-                    <div class="form-group">
-                        <label>Equipo</label>
-                        <input type="text" id="etq-equipo" value="${r.equipo_nombre || ''}" placeholder="Nombre del equipo">
-                    </div>
-                    <div class="form-group">
-                        <label>Modelo</label>
-                        <input type="text" id="etq-modelo" placeholder="Modelo">
-                    </div>
-                    <div class="form-group">
-                        <label>Capacidad</label>
-                        <input type="text" id="etq-capacidad" placeholder="Ej: 500 Kg/hr">
-                    </div>
-                    <div class="form-group">
-                        <label>Potencia Motor</label>
-                        <input type="text" id="etq-potencia" placeholder="Ej: 15 HP">
-                    </div>
-                    <div class="form-group">
-                        <label>Apertura</label>
-                        <input type="text" id="etq-apertura" placeholder='Ej: 3/8"'>
-                    </div>
-                    <div class="form-group">
-                        <label>Tamaño Alimentación</label>
-                        <input type="text" id="etq-tamano" placeholder='Ej: 4"'>
-                    </div>
-                    <div class="form-group">
-                        <label>Peso del Equipo</label>
-                        <input type="text" id="etq-peso" placeholder="Ej: 1200 Kg">
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha de Fabricación</label>
-                        <input type="date" id="etq-fecha-fab">
-                    </div>
-                    <div class="form-group">
-                        <label>Número de Serie <small style="color:#F47427;">(automático)</small></label>
-                        <div style="display:flex; gap:5px; align-items:center;">
-                            <input type="text" id="etq-serie" placeholder="Se genera automáticamente" readonly style="background:rgba(244,116,39,0.1); border-color:#F47427; flex:1;">
-                            <button class="btn" onclick="resetLastSerial()" style="background:#D2152B; color:#fff; padding:6px 10px; font-size:0.75rem; white-space:nowrap;" title="Eliminar ultimo serial generado">Quitar</button>
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-top:10px; padding:10px; background:rgba(244,116,39,0.05); border-radius:6px; border:1px solid rgba(244,116,39,0.2);">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <small style="color:#F47427;">Si generaste seriales de prueba, usa el boton "Quitar" para decrementar el contador, o haz clic en "Administrar" para ver/resetear todos los contadores.</small>
-                        <button class="btn" onclick="mostrarAdminSeriales()" style="background:rgba(244,116,39,0.2); color:#F47427; padding:5px 12px; font-size:0.75rem; white-space:nowrap;">Administrar</button>
-                    </div>
-                    <div id="admin-seriales-panel" style="display:none; margin-top:10px;"></div>
-                </div>
-                <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="descargarEtiquetaReq(${r.id})" style="background:#D2152B;">Generar PDF Etiqueta</button>
-                    <div class="form-group" style="flex:1; margin:0;">
-                        <label>Email destino</label>
-                        <input type="email" id="etq-email" placeholder="correo@ejemplo.com" style="margin:0;">
-                    </div>
-                    <button class="btn btn-success" onclick="enviarEtiquetaEmail(${r.id})">Enviar Etiqueta</button>
-                </div>
-            </div>
-        `;
-
         // General Actions
         const generalActions = `
             <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap; justify-content: flex-end; align-items:center;">
@@ -2330,7 +2257,7 @@ async function verRequisicion(rid) {
             </div>
         `;
 
-        body.innerHTML = headerInfo + itemsHtml + sendActionsHtml + etiquetaHtml + generalActions;
+        body.innerHTML = headerInfo + itemsHtml + sendActionsHtml + generalActions;
 
     } catch (e) {
         body.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
@@ -2605,6 +2532,138 @@ async function deleteRequisicion(rid) {
             loadRequisiciones();
         } else {
             notify(data.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ==================== ETIQUETAS STANDALONE ====================
+function populateEtiquetaStandaloneDropdown() {
+    const sel = document.getElementById('etq-equipo-select-standalone');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- Seleccionar equipo del catalogo --</option>';
+    equiposCatalogo.forEach(eq => {
+        sel.innerHTML += `<option value="${eq.id}">${eq.codigo || ''} - ${eq.nombre}</option>`;
+    });
+}
+
+async function autoFillEtiquetaStandalone(equipoId) {
+    if (!equipoId) return;
+    try {
+        const r = await fetch(`${API}/api/equipos/${equipoId}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const eq = await r.json();
+        document.getElementById('etq-equipo-s').value = eq.nombre || '';
+        document.getElementById('etq-modelo-s').value = eq.modelo || '';
+        document.getElementById('etq-capacidad-s').value = eq.capacidad || '';
+        document.getElementById('etq-potencia-s').value = eq.potencia_motor || '';
+        document.getElementById('etq-apertura-s').value = eq.apertura || '';
+        document.getElementById('etq-tamano-s').value = eq.tamano_alimentacion || '';
+        document.getElementById('etq-peso-s').value = eq.peso || '';
+        document.getElementById('etq-fecha-fab-s').value = new Date().toISOString().split('T')[0];
+
+        // Generate serial number
+        const modelo = eq.modelo || eq.nombre || 'EQ';
+        const prefix = modelo.replace(/\s+/g, '').toUpperCase();
+        let counters = JSON.parse(localStorage.getItem('durtron_serial_counters') || '{}');
+        counters[prefix] = (counters[prefix] || 0) + 1;
+        localStorage.setItem('durtron_serial_counters', JSON.stringify(counters));
+        const serial = `${prefix}-DT${counters[prefix]}`;
+        document.getElementById('etq-serie-s').value = serial;
+    } catch (e) {
+        notify('Error al cargar equipo: ' + e.message, 'error');
+    }
+}
+
+function getEtiquetaDataStandalone() {
+    return {
+        equipo: document.getElementById('etq-equipo-s').value || '',
+        modelo: document.getElementById('etq-modelo-s').value || '',
+        capacidad: document.getElementById('etq-capacidad-s').value || '',
+        potencia: document.getElementById('etq-potencia-s').value || '',
+        apertura: document.getElementById('etq-apertura-s').value || '',
+        tamano: document.getElementById('etq-tamano-s').value || '',
+        peso: document.getElementById('etq-peso-s').value || '',
+        fecha_fab: document.getElementById('etq-fecha-fab-s').value || '',
+        numero_serie: document.getElementById('etq-serie-s').value || ''
+    };
+}
+
+function descargarEtiquetaStandalone() {
+    const d = getEtiquetaDataStandalone();
+    if (!d.equipo) { notify('Selecciona un equipo primero', 'error'); return; }
+    // Reuse the same PDF generation logic as descargarEtiquetaReq
+    const w = window.open('', '_blank');
+    w.document.write(`
+        <html><head>
+        <title>Etiqueta ${d.equipo} - ${d.numero_serie || ''}</title>
+        <style>
+            body { margin:0; padding:20px; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f0f0f0; }
+            .etiqueta {
+                width:450px; background:#fff; border:3px solid #1a1a2e; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.15);
+            }
+            .etiqueta-header {
+                background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; padding:15px 20px; text-align:center;
+            }
+            .etiqueta-header h2 { margin:0; font-size:1.4rem; letter-spacing:2px; }
+            .etiqueta-header p { margin:3px 0 0; font-size:0.75rem; opacity:0.7; }
+            .etiqueta-body { padding:20px; }
+            .etiqueta-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee; font-size:0.85rem; }
+            .etiqueta-row:last-child { border-bottom:none; }
+            .etiqueta-label { font-weight:600; color:#555; }
+            .etiqueta-value { color:#1a1a2e; font-weight:500; text-align:right; }
+            .serie-box {
+                margin-top:10px; padding:10px; background:linear-gradient(135deg,#F47427,#e65100); color:#fff; border-radius:8px; text-align:center; font-size:1.1rem; font-weight:bold; letter-spacing:2px;
+            }
+            .etiqueta-footer { background:#f8f8f8; padding:8px 20px; text-align:center; font-size:0.65rem; color:#999; border-top:1px solid #eee; }
+            @media print {
+                body { background:#fff; padding:0; }
+                .etiqueta { border: 2px solid #000; box-shadow: none; }
+            }
+        </style>
+        </head><body>
+        <div class="etiqueta">
+            <div class="etiqueta-header">
+                <h2>DURTRON</h2>
+                <p>Innovación Industrial</p>
+            </div>
+            <div class="etiqueta-body">
+                <div class="etiqueta-row"><span class="etiqueta-label">Equipo</span><span class="etiqueta-value">${d.equipo}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Modelo</span><span class="etiqueta-value">${d.modelo || '-'}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Capacidad</span><span class="etiqueta-value">${d.capacidad || '-'}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Potencia Motor</span><span class="etiqueta-value">${d.potencia || '-'}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Apertura</span><span class="etiqueta-value">${d.apertura || '-'}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Tamaño Alimentación</span><span class="etiqueta-value">${d.tamano || '-'}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Peso</span><span class="etiqueta-value">${d.peso || '-'}</span></div>
+                <div class="etiqueta-row"><span class="etiqueta-label">Fecha de Fabricación</span><span class="etiqueta-value">${d.fecha_fab || '-'}</span></div>
+                ${d.numero_serie ? `<div class="serie-box">N/S: ${d.numero_serie}</div>` : ''}
+            </div>
+            <div class="etiqueta-footer">Av. del Sol #329, Durango, Dgo. | Tel: 618 134 1056 | DURTRON © ${new Date().getFullYear()}</div>
+        </div>
+        <script>setTimeout(()=>window.print(),500)<\/script>
+        </body></html>
+    `);
+    w.document.close();
+}
+
+async function enviarEtiquetaEmailStandalone() {
+    const email = document.getElementById('etq-email-s').value;
+    if (!email) { notify('Ingresa un email destino', 'error'); return; }
+    const data = getEtiquetaDataStandalone();
+    if (!data.equipo) { notify('Selecciona un equipo primero', 'error'); return; }
+    if (!confirm(`¿Enviar etiqueta de "${data.equipo}" a ${email}?`)) return;
+    try {
+        const res = await fetch(`${API}/api/enviar-etiqueta-standalone`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...data, email })
+        });
+        const result = await res.json();
+        if (result.success) {
+            notify('Etiqueta enviada exitosamente', 'success');
+        } else {
+            notify(result.error || 'Error al enviar etiqueta', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');
