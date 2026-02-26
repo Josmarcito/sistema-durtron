@@ -2944,15 +2944,23 @@ function getEtiquetaDataStandalone() {
 }
 // ==================== ETIQUETA CANVAS SYSTEM (3000x1500px) ====================
 let etiquetaLogoImg = null;
-(function preloadLogo() {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function () {
-        // Convert to black/white for engraving - lower threshold to catch orange/red
+let etiquetaIcons = {};
+(function preloadEtiquetaAssets() {
+    let loaded = 0;
+    const totalAssets = 6; // logo + 5 icons
+    function onAssetLoad() {
+        loaded++;
+        if (loaded >= totalAssets) dibujarEtiquetaPreview();
+    }
+
+    // Logo
+    const logoImg = new Image();
+    logoImg.crossOrigin = 'anonymous';
+    logoImg.onload = function () {
         const c = document.createElement('canvas');
-        c.width = img.width; c.height = img.height;
+        c.width = logoImg.width; c.height = logoImg.height;
         const ctx2 = c.getContext('2d');
-        ctx2.drawImage(img, 0, 0);
+        ctx2.drawImage(logoImg, 0, 0);
         const imgData = ctx2.getImageData(0, 0, c.width, c.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
@@ -2964,10 +2972,34 @@ let etiquetaLogoImg = null;
         }
         ctx2.putImageData(imgData, 0, 0);
         etiquetaLogoImg = c;
-        dibujarEtiquetaPreview();
+        onAssetLoad();
     };
-    img.src = 'logo.png';
+    logoImg.src = 'logo.png';
+
+    // Icons
+    const iconNames = ['phone', 'location', 'email', 'globe', 'check'];
+    iconNames.forEach(name => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () { etiquetaIcons[name] = img; onAssetLoad(); };
+        img.onerror = function () { onAssetLoad(); };
+        img.src = `icon_${name}.png`;
+    });
 })();
+
+// Helper: draw an icon image centered inside a circle
+function drawIconInCircle(ctx, icon, cx, cy, circleR, iconSize) {
+    // Draw circle
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
+    ctx.stroke();
+    // Draw icon centered
+    if (icon) {
+        ctx.drawImage(icon, cx - iconSize / 2, cy - iconSize / 2, iconSize, iconSize);
+    }
+}
 
 function dibujarEtiquetaPreview() {
     const canvas = document.getElementById('etiqueta-canvas');
@@ -2986,47 +3018,25 @@ function dibujarEtiquetaPreview() {
         ctx.drawImage(etiquetaLogoImg, 80, 60, logoW, logoH);
     }
 
-    // Quality badge (top-right) - draw checkmark circle
-    const badgeX = 2100, badgeY = 80;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(badgeX, badgeY + 30, 38, 0, Math.PI * 2);
-    ctx.stroke();
-    // Checkmark inside
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(badgeX - 15, badgeY + 30);
-    ctx.lineTo(badgeX - 3, badgeY + 42);
-    ctx.lineTo(badgeX + 18, badgeY + 14);
-    ctx.stroke();
-    // Scalloped edge (decorative dots)
-    ctx.fillStyle = '#000';
-    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-        ctx.beginPath();
-        ctx.arc(badgeX + Math.cos(a) * 48, badgeY + 30 + Math.sin(a) * 48, 8, 0, Math.PI * 2);
-        ctx.fill();
+    // Quality badge (top-right) - checkmark icon
+    const badgeX = 2100, badgeY = 110;
+    const badgeIconSize = 70;
+    if (etiquetaIcons.check) {
+        ctx.drawImage(etiquetaIcons.check, badgeX - badgeIconSize / 2, badgeY - badgeIconSize / 2, badgeIconSize, badgeIconSize);
     }
-    ctx.font = 'bold 48px Inter, sans-serif';
-    ctx.fillText('Calidad Industrial', badgeX + 70, badgeY + 45);
-
-    // Pin icon + location
-    const locY = badgeY + 120;
-    ctx.beginPath();
-    ctx.arc(badgeX + 5, locY - 10, 24, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(badgeX - 18, locY);
-    ctx.lineTo(badgeX + 5, locY + 35);
-    ctx.lineTo(badgeX + 28, locY);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(badgeX + 5, locY - 10, 10, 0, Math.PI * 2);
-    ctx.fill();
     ctx.fillStyle = '#000';
     ctx.font = 'bold 48px Inter, sans-serif';
-    ctx.fillText('Durtron Planta 1 Durango', badgeX + 70, locY + 15);
+    ctx.fillText('Calidad Industrial', badgeX + 55, badgeY + 15);
+
+    // Location pin icon + location text
+    const locY = badgeY + 100;
+    const locIconSize = 60;
+    if (etiquetaIcons.location) {
+        ctx.drawImage(etiquetaIcons.location, badgeX - locIconSize / 2, locY - locIconSize / 2, locIconSize, locIconSize);
+    }
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 48px Inter, sans-serif';
+    ctx.fillText('Durtron Planta 1 Durango', badgeX + 55, locY + 15);
 
     // Get form data
     const data = getEtiquetaDataStandalone();
@@ -3081,6 +3091,8 @@ function dibujarEtiquetaPreview() {
 
     // Contact bar (bottom) - tight to content
     const contactY = startY + 3 * rowH + 60;
+    const circleR = 42;
+    const iconSize = 50; // same size for all icons inside circles
     ctx.fillStyle = '#000';
 
     // Divider line
@@ -3091,35 +3103,21 @@ function dibujarEtiquetaPreview() {
     ctx.lineTo(W - 80, contactY - 20);
     ctx.stroke();
 
-    // Phone icon
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(160, contactY + 25, 42, 0, Math.PI * 2);
-    ctx.stroke();
+    // Phone
+    drawIconInCircle(ctx, etiquetaIcons.phone, 160, contactY + 25, circleR, iconSize);
     ctx.fillStyle = '#000';
-    ctx.font = '52px sans-serif';
-    ctx.fillText('✆', 134, contactY + 44);
     ctx.font = 'bold 48px Inter, sans-serif';
     ctx.fillText('6181341056', 230, contactY + 42);
 
-    // Email icon
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(1100, contactY + 25, 42, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.font = '50px sans-serif';
-    ctx.fillText('✉', 1075, contactY + 42);
+    // Email
+    drawIconInCircle(ctx, etiquetaIcons.email, 1100, contactY + 25, circleR, iconSize);
+    ctx.fillStyle = '#000';
     ctx.font = 'bold 44px Inter, sans-serif';
     ctx.fillText('contacto@durtron.com', 1170, contactY + 42);
 
-    // Web icon
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(2100, contactY + 25, 42, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.font = '52px sans-serif';
-    ctx.fillText('⊕', 2076, contactY + 44);
+    // Web
+    drawIconInCircle(ctx, etiquetaIcons.globe, 2100, contactY + 25, circleR, iconSize);
+    ctx.fillStyle = '#000';
     ctx.font = 'bold 44px Inter, sans-serif';
     ctx.fillText('www.durtron.com', 2170, contactY + 42);
 }
