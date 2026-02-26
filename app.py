@@ -1274,6 +1274,56 @@ def get_vendedores():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ==================== VENDEDORES CATALOGO ====================
+@app.route('/api/vendedores/catalogo')
+def get_vendedores_catalogo():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM vendedores_catalogo ORDER BY nombre ASC')
+        data = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/vendedores/catalogo', methods=['POST'])
+def create_vendedor():
+    try:
+        d = request.json
+        nombre = d.get('nombre', '').strip()
+        if not nombre:
+            return jsonify({'error': 'El nombre es obligatorio'}), 400
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO vendedores_catalogo (nombre, telefono, email)
+            VALUES (%s, %s, %s) RETURNING id
+        ''', (nombre, d.get('telefono', ''), d.get('email', '')))
+        vid = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': vid, 'message': 'Vendedor agregado'})
+    except Exception as e:
+        if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            return jsonify({'error': 'Ya existe un vendedor con ese nombre'}), 400
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/vendedores/catalogo/<int:vid>', methods=['DELETE'])
+def delete_vendedor_catalogo(vid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM vendedores_catalogo WHERE id=%s', (vid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Vendedor eliminado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ==================== COTIZACIONES ====================
 @app.route('/api/cotizaciones')
 def get_cotizaciones():
@@ -2241,10 +2291,20 @@ try:
             fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    _cur.execute('''
+        CREATE TABLE IF NOT EXISTS vendedores_catalogo (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(255) NOT NULL UNIQUE,
+            telefono VARCHAR(50),
+            email VARCHAR(100),
+            activo BOOLEAN DEFAULT TRUE,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     _conn.commit()
     _cur.close()
     _conn.close()
-    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos")
+    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos, vendedores_catalogo")
 except Exception as _e:
     print(f"Migration warning: {_e}")
 

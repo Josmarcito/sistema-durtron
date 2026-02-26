@@ -124,6 +124,19 @@ def init_db():
     ''')
     print("  OK tabla 'anticipos'")
 
+    # Tabla vendedores_catalogo
+    print("Creando tabla 'vendedores_catalogo'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vendedores_catalogo (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(255) NOT NULL UNIQUE,
+            telefono VARCHAR(50),
+            email VARCHAR(100),
+            activo BOOLEAN DEFAULT TRUE,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'vendedores_catalogo'")
 
     # Tabla cotizaciones
     print("Creando tabla 'cotizaciones'...")

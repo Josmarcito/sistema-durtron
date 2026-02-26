@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadInventario();
         loadVentas();
         loadVendedores();
+        loadVendedoresCatalogo();
         loadCotizaciones();
         loadProveedores(); // Ensure providers are loaded for Requisitions
     });
@@ -66,7 +67,7 @@ function setupNav() {
             if (window.innerWidth <= 768) {
                 document.getElementById('sidebar').classList.remove('open');
             }
-            if (s === 'vendedores') loadVendedores();
+            if (s === 'vendedores') { loadVendedores(); loadVendedoresCatalogo(); }
             if (s === 'ventas') loadVentas();
             if (s === 'dashboard') loadDashboard();
             if (s === 'cotizaciones') { loadCotizaciones(); populateCotEquipoSelects(); }
@@ -957,7 +958,73 @@ async function eliminarAnticipo(aid) {
     }
 }
 
-// ===== VENDEDORES =====
+// ===== VENDEDORES CATALOGO =====
+let vendedoresCatalogoData = [];
+
+async function loadVendedoresCatalogo() {
+    try {
+        const r = await fetch(`${API}/api/vendedores/catalogo`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        vendedoresCatalogoData = await r.json();
+        renderVendedoresCatalogo();
+        populateVendedorDropdowns();
+    } catch (e) {
+        console.error('Error loading vendedores catalogo:', e);
+    }
+}
+
+function renderVendedoresCatalogo() {
+    const tbody = document.getElementById('vendedores-catalogo-tbody');
+    if (!tbody) return;
+    if (vendedoresCatalogoData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">No hay vendedores registrados</td></tr>';
+        return;
+    }
+    tbody.innerHTML = vendedoresCatalogoData.map(v => `<tr>
+        <td>${v.id}</td>
+        <td><strong>${v.nombre}</strong></td>
+        <td>${v.telefono || '-'}</td>
+        <td>${v.email || '-'}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="deleteVendedorCatalogo(${v.id})">Eliminar</button></td>
+    </tr>`).join('');
+}
+
+function populateVendedorDropdowns() {
+    const selects = [
+        document.getElementById('venta-vendedor'),
+        document.getElementById('edit-venta-vendedor')
+    ];
+    selects.forEach(sel => {
+        if (!sel) return;
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">Seleccionar vendedor...</option>';
+        vendedoresCatalogoData.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.nombre;
+            opt.textContent = v.nombre;
+            sel.appendChild(opt);
+        });
+        if (currentVal) sel.value = currentVal;
+    });
+}
+
+async function deleteVendedorCatalogo(vid) {
+    if (!confirm('Eliminar este vendedor del directorio?')) return;
+    try {
+        const r = await fetch(`${API}/api/vendedores/catalogo/${vid}`, { method: 'DELETE' });
+        const res = await r.json();
+        if (res.success) {
+            notify('Vendedor eliminado', 'success');
+            loadVendedoresCatalogo();
+        } else {
+            notify(res.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+// ===== VENDEDORES STATS =====
 async function loadVendedores() {
     try {
         const r = await fetch(`${API}/api/vendedores`);
@@ -1153,6 +1220,33 @@ function setupForms() {
                 closeModal('modal-editar-venta');
                 loadVentas();
                 loadDashboard();
+            } else {
+                notify(res.error || 'Error', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        }
+    });
+
+    // Vendedor catalogo form
+    document.getElementById('form-vendedor-catalogo').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const body = {
+                nombre: document.getElementById('vendedor-nombre').value,
+                telefono: document.getElementById('vendedor-telefono').value,
+                email: document.getElementById('vendedor-email').value
+            };
+            const r = await fetch(`${API}/api/vendedores/catalogo`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const res = await r.json();
+            if (res.success) {
+                notify('Vendedor agregado al directorio', 'success');
+                document.getElementById('form-vendedor-catalogo').reset();
+                loadVendedoresCatalogo();
             } else {
                 notify(res.error || 'Error', 'error');
             }
