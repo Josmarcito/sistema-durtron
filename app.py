@@ -274,7 +274,6 @@ def get_config():
 @app.route('/api/dashboard')
 def get_dashboard():
     try:
-        year = request.args.get('year', datetime.now().year, type=int)
         conn = get_db()
         cur = conn.cursor()
 
@@ -284,88 +283,66 @@ def get_dashboard():
         cur.execute('SELECT COUNT(*) as total FROM inventario')
         total_inventario = cur.fetchone()['total']
 
-        cur.execute("SELECT COUNT(*) as total FROM inventario WHERE estado = 'Disponible'")
-        inv_disponible = cur.fetchone()['total']
-
-        # Ventas anuales con utilidad bruta y anticipos
+        # Ingresos: No Facturado, Facturado, Total
+        # No facturado = precio_venta donde facturado=false
+        # Facturado = precio_venta * 1.16 donde facturado=true (incluye IVA 16%)
         cur.execute('''
-            SELECT COUNT(*) as cnt,
-                   COALESCE(SUM(v.precio_venta),0) as neto,
-                   COALESCE(SUM(v.precio_venta - COALESCE(e.precio_costo,0)),0) as utilidad,
-                   COALESCE(SUM(CASE WHEN v.tiene_anticipo=true THEN v.anticipo_monto ELSE 0 END),0) as anticipos,
-                   COALESCE(SUM(CASE WHEN v.tiene_anticipo=true THEN v.precio_venta - v.anticipo_monto ELSE 0 END),0) as saldo_pendiente
-            FROM ventas v
-            LEFT JOIN equipos e ON v.equipo_id = e.id
-            WHERE EXTRACT(YEAR FROM v.fecha_venta)=%s
-        ''', (year,))
+            SELECT
+                COALESCE(SUM(CASE WHEN facturado=false THEN precio_venta ELSE 0 END),0) as no_facturado,
+                COALESCE(SUM(CASE WHEN facturado=true THEN precio_venta * 1.16 ELSE 0 END),0) as facturado,
+                COUNT(*) as total_ventas
+            FROM ventas
+        ''')
         row = cur.fetchone()
-        ventas_anio_cnt = row['cnt']
-        ventas_anio_neto = float(row['neto'])
-        ventas_anio_iva = round(ventas_anio_neto * 1.16, 2)
-        ventas_anio_utilidad = round(float(row['utilidad']), 2)
-        ventas_anio_anticipos = round(float(row['anticipos']), 2)
-        ventas_anio_saldo = round(float(row['saldo_pendiente']), 2)
+        ingreso_no_facturado = round(float(row['no_facturado']), 2)
+        ingreso_facturado = round(float(row['facturado']), 2)
+        ingreso_total = round(ingreso_no_facturado + ingreso_facturado, 2)
+        total_ventas = row['total_ventas']
 
-        # Mensual
-        cur.execute('''
-            SELECT EXTRACT(MONTH FROM v.fecha_venta)::int as mes,
-                   COUNT(*) as cnt,
-                   COALESCE(SUM(v.precio_venta),0) as neto,
-                   COALESCE(SUM(v.precio_venta - COALESCE(e.precio_costo,0)),0) as utilidad,
-                   COALESCE(SUM(CASE WHEN v.tiene_anticipo=true THEN v.anticipo_monto ELSE 0 END),0) as anticipos
-            FROM ventas v
-            LEFT JOIN equipos e ON v.equipo_id = e.id
-            WHERE EXTRACT(YEAR FROM v.fecha_venta)=%s
-            GROUP BY mes ORDER BY mes
-        ''', (year,))
-        rows = cur.fetchall()
-        monthly = {}
-        for r in rows:
-            neto = float(r['neto'])
-            monthly[r['mes']] = {
-                'total_ventas': r['cnt'],
-                'ingreso_neto': neto,
-                'ingreso_iva': round(neto * 1.16, 2),
-                'utilidad_bruta': round(float(r['utilidad']), 2),
-                'anticipos': round(float(r['anticipos']), 2)
-            }
-
-        default_month = {'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0, 'utilidad_bruta': 0.0, 'anticipos': 0.0}
-        meses_data = []
-        for m in range(1, 13):
-            d = monthly.get(m, default_month)
-            meses_data.append({
-                'mes': m,
-                'nombre': MESES[m-1],
-                **d
-            })
-
-        # Trimestral
-        trimestres = []
-        for q in range(4):
-            start = q * 3
-            t = {'trimestre': q+1, 'total_ventas': 0, 'ingreso_neto': 0.0, 'ingreso_iva': 0.0, 'utilidad_bruta': 0.0, 'anticipos': 0.0}
-            for i in range(3):
-                for k in ['total_ventas', 'ingreso_neto', 'ingreso_iva', 'utilidad_bruta', 'anticipos']:
-                    t[k] += meses_data[start+i].get(k, 0)
-            for k in ['ingreso_neto', 'ingreso_iva', 'utilidad_bruta', 'anticipos']:
-                t[k] = round(t[k], 2)
-            trimestres.append(t)
-
-        # Top equipos más vendidos
+        # Top equipos más vendidos (con porcentaje)
         cur.execute('''
             SELECT e.nombre, e.codigo, COUNT(v.id) as total_vendidos,
-                   COALESCE(SUM(v.precio_venta),0) as ingreso_total
+                   COALESCE(SUM(CASE WHEN v.facturado=true THEN v.precio_venta * 1.16 ELSE v.precio_venta END),0) as ingreso_total
             FROM ventas v
             JOIN equipos e ON v.equipo_id = e.id
-            WHERE EXTRACT(YEAR FROM v.fecha_venta)=%s
             GROUP BY e.nombre, e.codigo
             ORDER BY total_vendidos DESC, ingreso_total DESC
             LIMIT 10
-        ''', (year,))
+        ''')
         top_equipos = [dict(r) for r in cur.fetchall()]
         for t in top_equipos:
-            t['ingreso_total'] = float(t['ingreso_total'])
+            t['ingreso_total'] = round(float(t['ingreso_total']), 2)
+            t['porcentaje'] = round(t['ingreso_total'] / ingreso_total * 100, 1) if ingreso_total > 0 else 0
+
+        # Historial anual (2026-2030)
+        cur.execute('''
+            SELECT EXTRACT(YEAR FROM fecha_venta)::int as anio,
+                   COUNT(*) as ventas,
+                   COALESCE(SUM(CASE WHEN facturado=false THEN precio_venta ELSE 0 END),0) as no_facturado,
+                   COALESCE(SUM(CASE WHEN facturado=true THEN precio_venta * 1.16 ELSE 0 END),0) as facturado
+            FROM ventas
+            WHERE EXTRACT(YEAR FROM fecha_venta) BETWEEN 2026 AND 2030
+            GROUP BY anio ORDER BY anio
+        ''')
+        rows_anual = {r['anio']: r for r in cur.fetchall()}
+        historial_anual = []
+        for y in range(2026, 2031):
+            r = rows_anual.get(y)
+            if r:
+                nf = round(float(r['no_facturado']), 2)
+                f = round(float(r['facturado']), 2)
+                historial_anual.append({
+                    'anio': y,
+                    'ventas': r['ventas'],
+                    'no_facturado': nf,
+                    'facturado': f,
+                    'total': round(nf + f, 2)
+                })
+            else:
+                historial_anual.append({
+                    'anio': y, 'ventas': 0,
+                    'no_facturado': 0, 'facturado': 0, 'total': 0
+                })
 
         cur.close()
         conn.close()
@@ -373,17 +350,12 @@ def get_dashboard():
         return jsonify({
             'total_catalogo': total_catalogo,
             'total_inventario': total_inventario,
-            'inv_disponible': inv_disponible,
-            'ventas_anio': ventas_anio_cnt,
-            'ingreso_neto_anio': ventas_anio_neto,
-            'ingreso_iva_anio': ventas_anio_iva,
-            'utilidad_bruta_anio': ventas_anio_utilidad,
-            'anticipos_anio': ventas_anio_anticipos,
-            'saldo_pendiente_anio': ventas_anio_saldo,
-            'mensual': meses_data,
-            'trimestral': trimestres,
+            'ingreso_no_facturado': ingreso_no_facturado,
+            'ingreso_facturado': ingreso_facturado,
+            'ingreso_total': ingreso_total,
+            'total_ventas': total_ventas,
             'top_equipos': top_equipos,
-            'year': year
+            'historial_anual': historial_anual
         })
     except Exception as e:
         print(f"Error dashboard: {e}")

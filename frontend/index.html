@@ -71,37 +71,17 @@
                 <h2>Dashboard</h2>
 
                 <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value" id="stat-catalogo">0</div>
-                        <div class="stat-label">En Catalogo</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="stat-inventario">0</div>
-                        <div class="stat-label">En Inventario</div>
-                    </div>
                     <div class="stat-card accent">
-                        <div class="stat-value" id="stat-ingreso-neto">$0</div>
-                        <div class="stat-label">Ingreso Neto</div>
+                        <div class="stat-value" id="stat-no-facturado">$0</div>
+                        <div class="stat-label">Ingreso No Facturado</div>
                     </div>
                     <div class="stat-card accent2">
-                        <div class="stat-value" id="stat-ingreso-iva">$0</div>
-                        <div class="stat-label">Ingreso + IVA</div>
+                        <div class="stat-value" id="stat-facturado">$0</div>
+                        <div class="stat-label">Ingreso Facturado</div>
                     </div>
                     <div class="stat-card" style="border-color:#27ae60;">
-                        <div class="stat-value" style="color:#27ae60;" id="stat-utilidad">$0</div>
-                        <div class="stat-label">Utilidad Bruta</div>
-                    </div>
-                    <div class="stat-card" style="border-color:#8e44ad;">
-                        <div class="stat-value" style="color:#8e44ad;" id="stat-anticipos">$0</div>
-                        <div class="stat-label">Anticipos</div>
-                    </div>
-                    <div class="stat-card" style="border-color:#e67e22;">
-                        <div class="stat-value" style="color:#e67e22;" id="stat-saldo">$0</div>
-                        <div class="stat-label">Saldo por Cobrar</div>
-                    </div>
-                    <div class="stat-card accent3">
-                        <div class="stat-value" id="stat-total-ventas">0</div>
-                        <div class="stat-label">Total Ventas</div>
+                        <div class="stat-value" style="color:#27ae60;" id="stat-total">$0</div>
+                        <div class="stat-label">Ingreso Total</div>
                     </div>
                 </div>
 
@@ -132,7 +112,8 @@
                                     <th>Equipo</th>
                                     <th>Código</th>
                                     <th style="text-align:center">Unidades Vendidas</th>
-                                    <th style="text-align:right">Ingreso Total</th>
+                                    <th style="text-align:right">Ingreso</th>
+                                    <th style="text-align:right">%</th>
                                 </tr>
                             </thead>
                             <tbody id="top-equipos-tbody"></tbody>
@@ -142,18 +123,20 @@
 
                 <div class="card">
                     <div class="card-header">
-                        <h3>Desglose de Ventas</h3>
-                        <div class="toggle-group">
-                            <button class="toggle-btn active" id="btn-mensual"
-                                onclick="showPeriodo('mensual')">Mensual</button>
-                            <button class="toggle-btn" id="btn-trimestral"
-                                onclick="showPeriodo('trimestral')">Trimestral</button>
-                        </div>
+                        <h3>Historial Anual</h3>
                     </div>
                     <div class="table-wrapper">
                         <table>
-                            <thead id="periodo-thead"></thead>
-                            <tbody id="periodo-tbody"></tbody>
+                            <thead>
+                                <tr>
+                                    <th>Año</th>
+                                    <th style="text-align:center">Ventas</th>
+                                    <th style="text-align:right">No Facturado</th>
+                                    <th style="text-align:right">Facturado</th>
+                                    <th style="text-align:right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historial-anual-tbody"></tbody>
                         </table>
                     </div>
                 </div>

@@ -10,7 +10,6 @@ let ventasData = [];
 let configData = {};
 let dashboardData = {};
 let AVAILABLE_PROVIDERS = []; // Global providers list
-let periodoActual = 'mensual';
 let ingresosChart = null;
 
 // ===== AUTH =====
@@ -119,31 +118,19 @@ async function loadDashboard() {
         dashboardData = await r.json();
         const d = dashboardData;
 
-        document.getElementById('stat-catalogo').textContent = d.total_catalogo || 0;
-        document.getElementById('stat-inventario').textContent = d.total_inventario || 0;
-        document.getElementById('stat-ingreso-neto').textContent = money(d.ingreso_neto_anio);
-        document.getElementById('stat-ingreso-iva').textContent = money(d.ingreso_iva_anio);
-        document.getElementById('stat-utilidad').textContent = money(d.utilidad_bruta_anio);
-        document.getElementById('stat-anticipos').textContent = money(d.anticipos_anio);
-        document.getElementById('stat-saldo').textContent = money(d.saldo_pendiente_anio);
-        document.getElementById('stat-total-ventas').textContent = d.ventas_anio || 0;
+        document.getElementById('stat-no-facturado').textContent = money(d.ingreso_no_facturado);
+        document.getElementById('stat-facturado').textContent = money(d.ingreso_facturado);
+        document.getElementById('stat-total').textContent = money(d.ingreso_total);
 
         renderPieChart(d);
         renderTopEquiposChart(d);
         renderTopEquiposTable(d);
-        renderPeriodo();
+        renderHistorialAnual(d);
     } catch (e) {
         console.error('Error dashboard:', e);
-        // Fail silently for dashboard to avoid annoying alerts on connection issues
-        // notify('Error al cargar dashboard: ' + e.message, 'error');
-        document.getElementById('stat-catalogo').textContent = '-';
-        document.getElementById('stat-inventario').textContent = '-';
-        document.getElementById('stat-ingreso-neto').textContent = '$0.00';
-        document.getElementById('stat-ingreso-iva').textContent = '$0.00';
-        document.getElementById('stat-utilidad').textContent = '$0.00';
-        document.getElementById('stat-anticipos').textContent = '$0.00';
-        document.getElementById('stat-saldo').textContent = '$0.00';
-        document.getElementById('stat-total-ventas').textContent = '0';
+        document.getElementById('stat-no-facturado').textContent = '$0.00';
+        document.getElementById('stat-facturado').textContent = '$0.00';
+        document.getElementById('stat-total').textContent = '$0.00';
     }
 }
 
@@ -155,25 +142,23 @@ function renderPieChart(d) {
         ingresosChart.destroy();
     }
 
-    const neto = d.ingreso_neto_anio || 0;
-    const iva = (d.ingreso_iva_anio || 0) - neto;  // Solo la parte del IVA
-    const utilidad = d.utilidad_bruta_anio || 0;
+    const noFact = d.ingreso_no_facturado || 0;
+    const fact = d.ingreso_facturado || 0;
+    const total = noFact + fact;
 
     ingresosChart = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'pie',
         data: {
-            labels: ['Ingreso Neto', 'IVA (16%)', 'Utilidad Bruta'],
+            labels: ['No Facturado', 'Facturado'],
             datasets: [{
-                data: [neto, iva, utilidad],
+                data: [noFact, fact],
                 backgroundColor: [
                     'rgba(231, 76, 60, 0.85)',
-                    'rgba(52, 152, 219, 0.85)',
-                    'rgba(46, 204, 113, 0.85)'
+                    'rgba(52, 152, 219, 0.85)'
                 ],
                 borderColor: [
                     'rgba(231, 76, 60, 1)',
-                    'rgba(52, 152, 219, 1)',
-                    'rgba(46, 204, 113, 1)'
+                    'rgba(52, 152, 219, 1)'
                 ],
                 borderWidth: 2,
                 hoverOffset: 8
@@ -195,12 +180,12 @@ function renderPieChart(d) {
                 tooltip: {
                     callbacks: {
                         label: function (ctx) {
-                            return ctx.label + ': ' + money(ctx.raw);
+                            const pct = total > 0 ? (ctx.raw / total * 100).toFixed(1) : 0;
+                            return ctx.label + ': ' + money(ctx.raw) + ' (' + pct + '%)';
                         }
                     }
                 }
-            },
-            cutout: '55%'
+            }
         }
     });
 }
@@ -222,7 +207,6 @@ function renderTopEquiposChart(d) {
     }
 
     const labels = equipos.map(e => e.nombre.length > 20 ? e.nombre.substring(0, 18) + '...' : e.nombre);
-    const dataVentas = equipos.map(e => e.total_vendidos);
     const dataIngresos = equipos.map(e => e.ingreso_total);
 
     const colors = [
@@ -238,57 +222,40 @@ function renderTopEquiposChart(d) {
         'rgba(230, 126, 34, 0.85)'
     ];
 
+    const totalIngreso = dataIngresos.reduce((a, b) => a + b, 0);
+
     topEquiposChart = new Chart(ctx, {
-        type: 'bar',
+        type: 'pie',
         data: {
             labels: labels,
             datasets: [{
-                label: 'Unidades Vendidas',
-                data: dataVentas,
+                data: dataIngresos,
                 backgroundColor: colors.slice(0, equipos.length),
                 borderColor: colors.slice(0, equipos.length).map(c => c.replace('0.85', '1')),
                 borderWidth: 2,
-                borderRadius: 6,
-                barPercentage: 0.7
+                hoverOffset: 8
             }]
         },
         options: {
-            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        afterLabel: function (context) {
-                            const idx = context.dataIndex;
-                            return 'Ingreso: ' + money(dataIngresos[idx]);
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1,
-                        color: 'rgba(255,255,255,0.6)',
-                        font: { family: 'Inter' }
-                    },
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    title: {
-                        display: true,
-                        text: 'Unidades vendidas',
-                        color: 'rgba(255,255,255,0.5)',
-                        font: { family: 'Inter', size: 11 }
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyleWidth: 10,
+                        font: { size: 11, family: 'Inter' }
                     }
                 },
-                y: {
-                    ticks: {
-                        color: 'rgba(255,255,255,0.8)',
-                        font: { family: 'Inter', size: 12 }
-                    },
-                    grid: { display: false }
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            const pct = totalIngreso > 0 ? (ctx.raw / totalIngreso * 100).toFixed(1) : 0;
+                            return ctx.label + ': ' + money(ctx.raw) + ' (' + pct + '%)';
+                        }
+                    }
                 }
             }
         }
@@ -301,56 +268,41 @@ function renderTopEquiposTable(d) {
 
     const equipos = (d.top_equipos || []);
     if (equipos.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="loading">No hay ventas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No hay ventas registradas</td></tr>';
         return;
     }
 
-    const medals = ['1.', '2.', '3.'];
     tbody.innerHTML = equipos.map((e, i) => `
         <tr>
-            <td style="text-align:center; font-size:1.1rem;">${medals[i] || (i + 1)}</td>
+            <td style="text-align:center; font-size:1.1rem;">${i + 1}.</td>
             <td><strong>${e.nombre}</strong></td>
             <td style="color:#F47427;">${e.codigo}</td>
             <td style="text-align:center;"><span style="background:rgba(210,21,43,0.2); color:#D2152B; padding:3px 12px; border-radius:12px; font-weight:700;">${e.total_vendidos}</span></td>
             <td style="text-align:right; font-weight:600;">${money(e.ingreso_total)}</td>
+            <td style="text-align:right; color:#888;">${e.porcentaje}%</td>
         </tr>
     `).join('');
 }
 
-function showPeriodo(tipo) {
-    periodoActual = tipo;
-    document.getElementById('btn-mensual').classList.toggle('active', tipo === 'mensual');
-    document.getElementById('btn-trimestral').classList.toggle('active', tipo === 'trimestral');
-    renderPeriodo();
-}
+function renderHistorialAnual(d) {
+    const tbody = document.getElementById('historial-anual-tbody');
+    if (!tbody) return;
 
-function renderPeriodo() {
-    const thead = document.getElementById('periodo-thead');
-    const tbody = document.getElementById('periodo-tbody');
-    if (!dashboardData.mensual) {
-        tbody.innerHTML = '<tr><td colspan="4" class="loading">Sin datos</td></tr>';
+    const historial = d.historial_anual || [];
+    if (historial.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">Sin datos</td></tr>';
         return;
     }
 
-    thead.innerHTML = '<tr><th>' + (periodoActual === 'mensual' ? 'Mes' : 'Trimestre') +
-        '</th><th class="text-right">Ventas</th><th class="text-right">Ingreso Neto</th><th class="text-right">Ingreso + IVA</th><th class="text-right">Utilidad Bruta</th></tr>';
-
-    const data = periodoActual === 'mensual' ? dashboardData.mensual : dashboardData.trimestral;
-    if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="loading">Sin ventas registradas</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = data.map(d => {
-        const label = periodoActual === 'mensual' ? d.nombre : `Q${d.trimestre}`;
-        return `<tr>
-            <td><strong>${label}</strong></td>
-            <td class="text-right">${d.total_ventas}</td>
-            <td class="text-right font-bold">${money(d.ingreso_neto)}</td>
-            <td class="text-right">${money(d.ingreso_iva)}</td>
-            <td class="text-right" style="color:#27ae60;font-weight:600;">${money(d.utilidad_bruta)}</td>
-        </tr>`;
-    }).join('');
+    tbody.innerHTML = historial.map(h => `
+        <tr>
+            <td><strong>${h.anio}</strong></td>
+            <td style="text-align:center;">${h.ventas}</td>
+            <td style="text-align:right;">${money(h.no_facturado)}</td>
+            <td style="text-align:right;">${money(h.facturado)}</td>
+            <td style="text-align:right; font-weight:700; color:#27ae60;">${money(h.total)}</td>
+        </tr>
+    `).join('');
 }
 
 // ===== CATALOGO =====
