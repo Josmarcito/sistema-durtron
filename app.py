@@ -1008,7 +1008,6 @@ def vender_item(iid):
         conn = get_db()
         cur = conn.cursor()
 
-        # Obtener info del inventario
         cur.execute('SELECT * FROM inventario WHERE id=%s', (iid,))
         inv = cur.fetchone()
         if not inv:
@@ -1024,25 +1023,19 @@ def vender_item(iid):
         descuento_monto = precio_lista - precio_venta if precio_lista > precio_venta else 0
         descuento_pct = (descuento_monto / precio_lista * 100) if precio_lista > 0 else 0
 
-        # Anticipo: validaciones
-        tiene_anticipo = d.get('tiene_anticipo', False)
-        anticipo_monto = 0
-        anticipo_fecha = None
-        if tiene_anticipo:
-            anticipo_monto = float(d.get('anticipo_monto', 0))
-            if anticipo_monto <= 0:
-                return jsonify({'error': 'El monto del anticipo es obligatorio cuando hay anticipo'}), 400
-            if anticipo_monto > precio_venta:
-                return jsonify({'error': 'El anticipo no puede ser mayor al precio de venta'}), 400
-            anticipo_fecha = d.get('anticipo_fecha') or None
+        # Anticipo inicial
+        anticipo_monto = float(d.get('anticipo_monto', 0))
+        tiene_anticipo = anticipo_monto > 0
+        estado_venta = 'Liquidado' if anticipo_monto >= precio_venta else 'Anticipo'
 
         cur.execute('''
             INSERT INTO ventas (inventario_id, equipo_id, vendedor, cliente_nombre,
                 cliente_contacto, cliente_rfc, cliente_direccion, precio_venta,
                 descuento_monto, descuento_porcentaje, motivo_descuento,
                 forma_pago, facturado, numero_factura, autorizado_por,
-                tiene_anticipo, anticipo_monto, anticipo_fecha, notas)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                tiene_anticipo, anticipo_monto, anticipo_fecha,
+                cuenta_bancaria, entregado, estado_venta, notas)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         ''', (
             iid, inv['equipo_id'], d.get('vendedor',''),
             d.get('cliente_nombre',''), d.get('cliente_contacto',''),
@@ -1051,10 +1044,20 @@ def vender_item(iid):
             d.get('motivo_descuento',''), d.get('forma_pago',''),
             d.get('facturado', False), d.get('numero_factura',''),
             d.get('autorizado_por',''),
-            tiene_anticipo, anticipo_monto, anticipo_fecha,
+            tiene_anticipo, anticipo_monto, d.get('anticipo_fecha') or None,
+            d.get('cuenta_bancaria', ''),
+            d.get('entregado', False),
+            estado_venta,
             d.get('notas','')
         ))
         vid = cur.fetchone()['id']
+
+        # Si hay anticipo inicial, registrarlo en tabla anticipos
+        if tiene_anticipo and anticipo_monto > 0:
+            cur.execute('''
+                INSERT INTO anticipos (venta_id, monto, fecha, notas)
+                VALUES (%s, %s, %s, %s)
+            ''', (vid, anticipo_monto, d.get('anticipo_fecha') or None, 'Anticipo inicial'))
 
         # Marcar inventario como vendida
         cur.execute("UPDATE inventario SET estado='Vendida' WHERE id=%s", (iid,))
@@ -1080,10 +1083,45 @@ def get_ventas():
             LEFT JOIN inventario i ON v.inventario_id = i.id
             ORDER BY v.fecha_venta DESC
         ''')
-        data = cur.fetchall()
+        ventas = cur.fetchall()
+        # Agregar anticipos a cada venta
+        for v in ventas:
+            cur.execute('SELECT * FROM anticipos WHERE venta_id=%s ORDER BY fecha ASC', (v['id'],))
+            v['anticipos'] = cur.fetchall()
+            total_anticipos = sum(float(a['monto']) for a in v['anticipos'])
+            v['total_anticipos'] = total_anticipos
         cur.close()
         conn.close()
-        return json.dumps(data, default=decimal_default), 200, {'Content-Type': 'application/json'}
+        return json.dumps(ventas, default=decimal_default), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ventas/<int:vid>', methods=['PUT'])
+def update_venta(vid):
+    try:
+        d = request.json
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE ventas SET
+                vendedor=%s, cliente_nombre=%s, cliente_contacto=%s,
+                cliente_rfc=%s, cliente_direccion=%s, precio_venta=%s,
+                forma_pago=%s, facturado=%s, numero_factura=%s,
+                cuenta_bancaria=%s, entregado=%s, estado_venta=%s, notas=%s
+            WHERE id=%s
+        ''', (
+            d.get('vendedor',''), d.get('cliente_nombre',''),
+            d.get('cliente_contacto',''), d.get('cliente_rfc',''),
+            d.get('cliente_direccion',''), float(d.get('precio_venta', 0)),
+            d.get('forma_pago',''), d.get('facturado', False),
+            d.get('numero_factura',''), d.get('cuenta_bancaria',''),
+            d.get('entregado', False), d.get('estado_venta','Anticipo'),
+            d.get('notas',''), vid
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Venta actualizada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1092,14 +1130,11 @@ def delete_venta(vid):
     try:
         conn = get_db()
         cur = conn.cursor()
-        # Obtener el inventario_id antes de borrar
         cur.execute('SELECT inventario_id FROM ventas WHERE id=%s', (vid,))
         venta = cur.fetchone()
         if not venta:
             return jsonify({'error': 'Venta no encontrada'}), 404
-        # Restaurar inventario a Disponible
         cur.execute("UPDATE inventario SET estado='Disponible' WHERE id=%s", (venta['inventario_id'],))
-        # Eliminar la venta
         cur.execute('DELETE FROM ventas WHERE id=%s', (vid,))
         conn.commit()
         cur.close()
@@ -1107,6 +1142,106 @@ def delete_venta(vid):
         return jsonify({'success': True, 'message': 'Venta eliminada y equipo restaurado a inventario'})
     except Exception as e:
         print(f'Error eliminando venta: {e}')
+        return jsonify({'error': str(e)}), 500
+
+# ==================== ANTICIPOS ====================
+@app.route('/api/ventas/<int:vid>/anticipos', methods=['POST'])
+def add_anticipo(vid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Handle multipart (with file) or JSON
+        if request.content_type and 'multipart' in request.content_type:
+            monto = float(request.form.get('monto', 0))
+            fecha = request.form.get('fecha') or None
+            notas = request.form.get('notas', '')
+            comprobante_url = ''
+            if 'comprobante' in request.files:
+                file = request.files['comprobante']
+                if file.filename:
+                    # Save to static/uploads
+                    import os
+                    uploads_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+                    os.makedirs(uploads_dir, exist_ok=True)
+                    fname = f'anticipo_{vid}_{secrets.token_hex(4)}.png'
+                    fpath = os.path.join(uploads_dir, fname)
+                    file.save(fpath)
+                    comprobante_url = f'/static/uploads/{fname}'
+        else:
+            d = request.json or {}
+            monto = float(d.get('monto', 0))
+            fecha = d.get('fecha') or None
+            notas = d.get('notas', '')
+            comprobante_url = d.get('comprobante_url', '')
+
+        if monto <= 0:
+            return jsonify({'error': 'El monto debe ser mayor a 0'}), 400
+
+        cur.execute('''
+            INSERT INTO anticipos (venta_id, monto, fecha, comprobante_url, notas)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+        ''', (vid, monto, fecha, comprobante_url, notas))
+        aid = cur.fetchone()['id']
+
+        # Recalcular total anticipos y actualizar estado de la venta
+        cur.execute('SELECT SUM(monto) as total FROM anticipos WHERE venta_id=%s', (vid,))
+        total = float(cur.fetchone()['total'] or 0)
+        cur.execute('SELECT precio_venta FROM ventas WHERE id=%s', (vid,))
+        pv = float(cur.fetchone()['precio_venta'])
+        nuevo_estado = 'Liquidado' if total >= pv else 'Anticipo'
+        cur.execute('UPDATE ventas SET anticipo_monto=%s, tiene_anticipo=TRUE, estado_venta=%s WHERE id=%s',
+                    (total, nuevo_estado, vid))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'id': aid, 'total_anticipos': total, 'estado': nuevo_estado})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/anticipos/<int:aid>', methods=['DELETE'])
+def delete_anticipo(aid):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT venta_id FROM anticipos WHERE id=%s', (aid,))
+        ant = cur.fetchone()
+        if not ant:
+            return jsonify({'error': 'Anticipo no encontrado'}), 404
+        vid = ant['venta_id']
+        cur.execute('DELETE FROM anticipos WHERE id=%s', (aid,))
+        # Recalcular
+        cur.execute('SELECT COALESCE(SUM(monto),0) as total FROM anticipos WHERE venta_id=%s', (vid,))
+        total = float(cur.fetchone()['total'])
+        cur.execute('SELECT precio_venta FROM ventas WHERE id=%s', (vid,))
+        pv = float(cur.fetchone()['precio_venta'])
+        nuevo_estado = 'Liquidado' if total >= pv else 'Anticipo'
+        tiene = total > 0
+        cur.execute('UPDATE ventas SET anticipo_monto=%s, tiene_anticipo=%s, estado_venta=%s WHERE id=%s',
+                    (total, tiene, nuevo_estado, vid))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'total_anticipos': total, 'estado': nuevo_estado})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/inventario/reset', methods=['POST'])
+def reset_inventario():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM anticipos')
+        cur.execute('DELETE FROM ventas')
+        cur.execute('DELETE FROM inventario')
+        cur.execute('ALTER SEQUENCE inventario_id_seq RESTART WITH 1')
+        cur.execute('ALTER SEQUENCE ventas_id_seq RESTART WITH 1')
+        cur.execute('ALTER SEQUENCE anticipos_id_seq RESTART WITH 1')
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Inventario, ventas y anticipos reiniciados. IDs desde 1.'})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 # ==================== VENDEDORES ====================
@@ -2092,10 +2227,24 @@ try:
     _conn = get_db()
     _cur = _conn.cursor()
     _cur.execute("ALTER TABLE equipos ADD COLUMN IF NOT EXISTS version VARCHAR(20) DEFAULT '1.0'")
+    _cur.execute("ALTER TABLE ventas ADD COLUMN IF NOT EXISTS cuenta_bancaria TEXT")
+    _cur.execute("ALTER TABLE ventas ADD COLUMN IF NOT EXISTS entregado BOOLEAN DEFAULT FALSE")
+    _cur.execute("ALTER TABLE ventas ADD COLUMN IF NOT EXISTS estado_venta VARCHAR(50) DEFAULT 'Anticipo'")
+    _cur.execute('''
+        CREATE TABLE IF NOT EXISTS anticipos (
+            id SERIAL PRIMARY KEY,
+            venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+            monto DECIMAL(12, 2) NOT NULL,
+            fecha DATE DEFAULT CURRENT_DATE,
+            comprobante_url TEXT,
+            notas TEXT,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     _conn.commit()
     _cur.close()
     _conn.close()
-    print("Migration OK: equipos.version")
+    print("Migration OK: version, cuenta_bancaria, entregado, estado_venta, anticipos")
 except Exception as _e:
     print(f"Migration warning: {_e}")
 

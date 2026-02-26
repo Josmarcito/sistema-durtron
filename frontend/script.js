@@ -624,13 +624,12 @@ async function loadInventario() {
 function renderInventario(items) {
     const tbody = document.getElementById('inventario-tbody');
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">No hay items en inventario</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No hay items en inventario</td></tr>';
         return;
     }
     tbody.innerHTML = items.map(it => `<tr>
         <td>${it.id}</td>
         <td><strong>${it.equipo_nombre}</strong></td>
-        <td>${it.numero_serie || '-'}</td>
         <td>${badgeEstado(it.estado)}${it.estado === 'Disponible - Faltan Piezas' && it.observaciones ? `<br><small style="color:#e67e22;">${it.observaciones}</small>` : ''}</td>
         <td class="text-right">${money(it.precio_lista)}</td>
         <td>${formatDate(it.fecha_ingreso)}</td>
@@ -756,11 +755,9 @@ async function openVenta(id) {
 
         document.getElementById('venta-inv-id').value = id;
         document.getElementById('venta-equipo-info').innerHTML = `
-            <div class="info-row"><strong>${it.equipo_codigo}</strong> - ${it.equipo_nombre}</div>
-            <div class="info-row"><span>Precio Lista:</span> <strong class="text-success">${money(it.precio_lista)}</strong> |
-                <span>Precio Min:</span> <strong class="text-warning">${money(it.precio_minimo)}</strong></div>
+            <div class="info-row"><strong>${it.equipo_nombre}</strong></div>
+            <div class="info-row"><span>Precio Lista:</span> <strong class="text-success">${money(it.precio_lista)}</strong></div>
         `;
-        document.getElementById('venta-precio').value = it.precio_lista || 0;
         document.getElementById('form-venta').reset();
         document.getElementById('venta-inv-id').value = id;
         document.getElementById('venta-precio').value = it.precio_lista || 0;
@@ -791,20 +788,28 @@ function renderVentas() {
         return;
     }
     tbody.innerHTML = ventasData.map(v => {
-        const anticipo = v.tiene_anticipo
-            ? `<span class="badge badge-si">${money(v.anticipo_monto)}</span>`
+        const estado = v.estado_venta || 'Anticipo';
+        const estadoBadge = estado === 'Liquidado'
+            ? '<span class="badge badge-disponible">Liquidado</span>'
+            : `<span class="badge badge-anticipo">Anticipo</span>`;
+        const entregado = v.entregado
+            ? '<span class="badge badge-si">Si</span>'
             : '<span class="badge badge-no">No</span>';
-        const saldo = v.tiene_anticipo ? money(v.precio_venta - (v.anticipo_monto || 0)) : '-';
         return `<tr>
         <td>${formatDate(v.fecha_venta)}</td>
-        <td><strong>${v.equipo_codigo || ''}</strong> ${v.equipo_nombre || ''}</td>
+        <td><strong>${v.equipo_nombre || ''}</strong></td>
         <td>${v.cliente_nombre}</td>
         <td>${v.vendedor}</td>
         <td class="text-right font-bold">${money(v.precio_venta)}</td>
-        <td>${v.forma_pago || '-'}</td>
+        <td>${estadoBadge}</td>
+        <td>${entregado}</td>
         <td>${v.facturado ? '<span class="badge badge-si">Si</span>' : '<span class="badge badge-no">No</span>'}</td>
-        <td>${anticipo}</td>
-        <td><button class="btn btn-sm btn-danger" onclick="deleteVenta(${v.id})">Eliminar</button></td>
+        <td>
+            <div class="action-buttons">
+                <button class="btn btn-sm btn-primary" onclick="editarVenta(${v.id})">Editar</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteVenta(${v.id})">Eliminar</button>
+            </div>
+        </td>
     </tr>`;
     }).join('');
 }
@@ -822,6 +827,130 @@ async function deleteVenta(id) {
             loadVendedores();
         } else {
             notify(data.error || 'Error al eliminar', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+let editingVentaData = null;
+
+function editarVenta(vid) {
+    const v = ventasData.find(x => x.id === vid);
+    if (!v) { notify('Venta no encontrada', 'error'); return; }
+    editingVentaData = v;
+
+    document.getElementById('edit-venta-id').value = v.id;
+    document.getElementById('edit-venta-vendedor').value = v.vendedor || '';
+    document.getElementById('edit-venta-cliente').value = v.cliente_nombre || '';
+    document.getElementById('edit-venta-contacto').value = v.cliente_contacto || '';
+    document.getElementById('edit-venta-rfc').value = v.cliente_rfc || '';
+    document.getElementById('edit-venta-direccion').value = v.cliente_direccion || '';
+    document.getElementById('edit-venta-precio').value = v.precio_venta || 0;
+    document.getElementById('edit-venta-forma-pago').value = v.forma_pago || '';
+    document.getElementById('edit-venta-facturado').value = v.facturado ? 'true' : 'false';
+    document.getElementById('edit-venta-num-factura').value = v.numero_factura || '';
+    document.getElementById('edit-venta-cuenta').value = v.cuenta_bancaria || '';
+    document.getElementById('edit-venta-entregado').value = v.entregado ? 'true' : 'false';
+    document.getElementById('edit-venta-estado').value = v.estado_venta || 'Anticipo';
+    document.getElementById('edit-venta-notas').value = v.notas || '';
+
+    renderAnticiposList(v.anticipos || [], v.precio_venta);
+    openModal('modal-editar-venta');
+}
+
+function renderAnticiposList(anticipos, precioVenta) {
+    const container = document.getElementById('edit-venta-anticipos-list');
+    if (!anticipos || anticipos.length === 0) {
+        container.innerHTML = '<p style="color:#888;font-size:0.85rem;">Sin anticipos registrados</p>';
+        return;
+    }
+    const total = anticipos.reduce((s, a) => s + parseFloat(a.monto), 0);
+    const pct = precioVenta > 0 ? (total / precioVenta * 100).toFixed(1) : 0;
+    let html = `<div style="margin-bottom:0.5rem;font-size:0.9rem;"><strong>Total: ${money(total)}</strong> de ${money(precioVenta)} (${pct}%)</div>`;
+    html += '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Fecha</th><th>Monto</th><th>Notas</th><th>Comp.</th><th></th></tr></thead><tbody>';
+    anticipos.forEach(a => {
+        const comp = a.comprobante_url
+            ? `<a href="${API}${a.comprobante_url}" target="_blank" style="color:#3498db;">Ver</a>`
+            : '-';
+        html += `<tr>
+            <td>${formatDate(a.fecha)}</td>
+            <td>${money(a.monto)}</td>
+            <td>${a.notas || '-'}</td>
+            <td>${comp}</td>
+            <td><button class="btn btn-sm btn-danger" onclick="eliminarAnticipo(${a.id})" style="padding:2px 6px;font-size:0.7rem;">X</button></td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function abrirAgregarAnticipo() {
+    const vid = document.getElementById('edit-venta-id').value;
+    document.getElementById('anticipo-venta-id').value = vid;
+    document.getElementById('anticipo-monto').value = '';
+    document.getElementById('anticipo-fecha').value = new Date().toISOString().split('T')[0];
+    document.getElementById('anticipo-notas').value = '';
+    document.getElementById('anticipo-comprobante').value = '';
+    openModal('modal-agregar-anticipo');
+}
+
+async function guardarAnticipo() {
+    const vid = document.getElementById('anticipo-venta-id').value;
+    const monto = parseFloat(document.getElementById('anticipo-monto').value) || 0;
+    if (monto <= 0) { notify('Ingresa un monto', 'error'); return; }
+
+    const fd = new FormData();
+    fd.append('monto', monto);
+    fd.append('fecha', document.getElementById('anticipo-fecha').value || '');
+    fd.append('notas', document.getElementById('anticipo-notas').value || '');
+    const fileInput = document.getElementById('anticipo-comprobante');
+    if (fileInput.files.length > 0) {
+        fd.append('comprobante', fileInput.files[0]);
+    }
+
+    try {
+        const r = await fetch(`${API}/api/ventas/${vid}/anticipos`, {
+            method: 'POST',
+            body: fd
+        });
+        const res = await r.json();
+        if (res.success) {
+            notify(`Anticipo registrado. Total: ${money(res.total_anticipos)}. Estado: ${res.estado}`, 'success');
+            closeModal('modal-agregar-anticipo');
+            // Reload ventas and refresh edit modal
+            await loadVentas();
+            const updatedV = ventasData.find(x => x.id === parseInt(vid));
+            if (updatedV) {
+                editingVentaData = updatedV;
+                document.getElementById('edit-venta-estado').value = updatedV.estado_venta || 'Anticipo';
+                renderAnticiposList(updatedV.anticipos || [], updatedV.precio_venta);
+            }
+        } else {
+            notify(res.error || 'Error', 'error');
+        }
+    } catch (e) {
+        notify('Error: ' + e.message, 'error');
+    }
+}
+
+async function eliminarAnticipo(aid) {
+    if (!confirm('Eliminar este anticipo?')) return;
+    try {
+        const r = await fetch(`${API}/api/anticipos/${aid}`, { method: 'DELETE' });
+        const res = await r.json();
+        if (res.success) {
+            notify('Anticipo eliminado', 'success');
+            const vid = document.getElementById('edit-venta-id').value;
+            await loadVentas();
+            const updatedV = ventasData.find(x => x.id === parseInt(vid));
+            if (updatedV) {
+                editingVentaData = updatedV;
+                document.getElementById('edit-venta-estado').value = updatedV.estado_venta || 'Anticipo';
+                renderAnticiposList(updatedV.anticipos || [], updatedV.precio_venta);
+            }
+        } else {
+            notify(res.error || 'Error', 'error');
         }
     } catch (e) {
         notify('Error: ' + e.message, 'error');
@@ -949,38 +1078,13 @@ function setupForms() {
         document.getElementById('factura-num-group').style.display = e.target.value === 'true' ? 'block' : 'none';
     });
 
-    // Venta form: anticipo toggle
-    document.getElementById('venta-anticipo').addEventListener('change', (e) => {
-        const show = e.target.value === 'true';
-        const fields = document.getElementById('anticipo-fields');
-        fields.style.display = show ? 'flex' : 'none';
-        if (!show) {
-            document.getElementById('venta-anticipo-monto').value = '';
-            document.getElementById('venta-anticipo-fecha').value = '';
-        }
-    });
-
     document.getElementById('form-venta').addEventListener('submit', async (e) => {
         e.preventDefault();
         try {
             const invId = document.getElementById('venta-inv-id').value;
             const precioVenta = parseFloat(document.getElementById('venta-precio').value) || 0;
-            const tieneAnticipo = document.getElementById('venta-anticipo').value === 'true';
-            let anticipoMonto = 0;
-            let anticipoFecha = '';
-
-            if (tieneAnticipo) {
-                anticipoMonto = parseFloat(document.getElementById('venta-anticipo-monto').value) || 0;
-                if (anticipoMonto <= 0) {
-                    notify('Ingresa el monto del anticipo', 'error');
-                    return;
-                }
-                if (anticipoMonto > precioVenta) {
-                    notify('El anticipo no puede ser mayor al precio de venta', 'error');
-                    return;
-                }
-                anticipoFecha = document.getElementById('venta-anticipo-fecha').value || '';
-            }
+            const anticipoMonto = parseFloat(document.getElementById('venta-anticipo-monto').value) || 0;
+            const anticipoFecha = document.getElementById('venta-anticipo-fecha').value || null;
 
             const body = {
                 vendedor: document.getElementById('venta-vendedor').value,
@@ -992,9 +1096,9 @@ function setupForms() {
                 forma_pago: document.getElementById('venta-forma-pago').value,
                 facturado: document.getElementById('venta-facturado').value === 'true',
                 numero_factura: document.getElementById('venta-num-factura').value,
-                tiene_anticipo: tieneAnticipo,
+                cuenta_bancaria: document.getElementById('venta-cuenta').value,
                 anticipo_monto: anticipoMonto,
-                anticipo_fecha: anticipoFecha || null,
+                anticipo_fecha: anticipoFecha,
                 notas: document.getElementById('venta-notas').value
             };
             const r = await fetch(`${API}/api/inventario/${invId}/vender`, {
@@ -1010,6 +1114,45 @@ function setupForms() {
                 loadVentas();
                 loadDashboard();
                 loadVendedores();
+            } else {
+                notify(res.error || 'Error', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        }
+    });
+
+    // Editar venta form
+    document.getElementById('form-editar-venta').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const vid = document.getElementById('edit-venta-id').value;
+        const body = {
+            vendedor: document.getElementById('edit-venta-vendedor').value,
+            cliente_nombre: document.getElementById('edit-venta-cliente').value,
+            cliente_contacto: document.getElementById('edit-venta-contacto').value,
+            cliente_rfc: document.getElementById('edit-venta-rfc').value,
+            cliente_direccion: document.getElementById('edit-venta-direccion').value,
+            precio_venta: parseFloat(document.getElementById('edit-venta-precio').value) || 0,
+            forma_pago: document.getElementById('edit-venta-forma-pago').value,
+            facturado: document.getElementById('edit-venta-facturado').value === 'true',
+            numero_factura: document.getElementById('edit-venta-num-factura').value,
+            cuenta_bancaria: document.getElementById('edit-venta-cuenta').value,
+            entregado: document.getElementById('edit-venta-entregado').value === 'true',
+            estado_venta: document.getElementById('edit-venta-estado').value,
+            notas: document.getElementById('edit-venta-notas').value
+        };
+        try {
+            const r = await fetch(`${API}/api/ventas/${vid}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const res = await r.json();
+            if (res.success) {
+                notify('Venta actualizada', 'success');
+                closeModal('modal-editar-venta');
+                loadVentas();
+                loadDashboard();
             } else {
                 notify(res.error || 'Error', 'error');
             }

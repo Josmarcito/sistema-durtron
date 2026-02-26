@@ -96,15 +96,34 @@ def init_db():
             fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    # Agregar columnas de anticipo si no existen (para BD existentes)
+    # Agregar columnas nuevas si no existen
     for col, tipo in [('tiene_anticipo', 'BOOLEAN DEFAULT FALSE'),
                       ('anticipo_monto', 'DECIMAL(12,2) DEFAULT 0'),
-                      ('anticipo_fecha', 'DATE')]:
+                      ('anticipo_fecha', 'DATE'),
+                      ('cuenta_bancaria', 'TEXT'),
+                      ('entregado', 'BOOLEAN DEFAULT FALSE'),
+                      ('estado_venta', "VARCHAR(50) DEFAULT 'Anticipo'")]:
         try:
             cursor.execute(f"ALTER TABLE ventas ADD COLUMN IF NOT EXISTS {col} {tipo}")
         except Exception:
             pass
     print("  OK tabla 'ventas'")
+
+    # Tabla anticipos (multiples anticipos por venta)
+    print("Creando tabla 'anticipos'...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS anticipos (
+            id SERIAL PRIMARY KEY,
+            venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+            monto DECIMAL(12, 2) NOT NULL,
+            fecha DATE DEFAULT CURRENT_DATE,
+            comprobante_url TEXT,
+            notas TEXT,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("  OK tabla 'anticipos'")
+
 
     # Tabla cotizaciones
     print("Creando tabla 'cotizaciones'...")

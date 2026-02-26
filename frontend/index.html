@@ -429,7 +429,6 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Equipo</th>
-                                    <th>N/Serie</th>
                                     <th>Estado</th>
                                     <th>Precio Lista</th>
                                     <th>Fecha Ingreso</th>
@@ -438,7 +437,7 @@
                             </thead>
                             <tbody id="inventario-tbody">
                                 <tr>
-                                    <td colspan="7" class="loading">Cargando...</td>
+                                    <td colspan="6" class="loading">Cargando...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -490,9 +489,9 @@
                                     <th>Cliente</th>
                                     <th>Vendedor</th>
                                     <th>Precio Venta</th>
-                                    <th>Forma Pago</th>
+                                    <th>Estado</th>
+                                    <th>Entregado</th>
                                     <th>Facturado</th>
-                                    <th>Anticipo</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
@@ -747,30 +746,21 @@
                             <input type="text" id="venta-num-factura">
                         </div>
                         <div class="form-group full-width">
+                            <label for="venta-cuenta">Cuenta(s) Bancaria(s)</label>
+                            <input type="text" id="venta-cuenta" placeholder="Ej: BBVA 50%, Banorte 50%">
+                        </div>
+                        <div class="form-group">
+                            <label for="venta-anticipo-monto">Anticipo Inicial ($)</label>
+                            <input type="number" id="venta-anticipo-monto" step="0.01" min="0"
+                                placeholder="0 si sin anticipo">
+                        </div>
+                        <div class="form-group">
+                            <label for="venta-anticipo-fecha">Fecha Anticipo</label>
+                            <input type="date" id="venta-anticipo-fecha">
+                        </div>
+                        <div class="form-group full-width">
                             <label for="venta-notas">Notas</label>
                             <textarea id="venta-notas" rows="2"></textarea>
-                        </div>
-                        <div class="form-group full-width anticipo-section">
-                            <label>Anticipo</label>
-                            <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
-                                <select id="venta-anticipo" style="width:120px;">
-                                    <option value="false">No</option>
-                                    <option value="true">Si</option>
-                                </select>
-                                <div id="anticipo-fields" style="display:none;flex:1;display:none;gap:0.8rem;">
-                                    <div style="flex:1;">
-                                        <label for="venta-anticipo-monto" style="font-size:0.75rem;">Monto Anticipo
-                                            *</label>
-                                        <input type="number" id="venta-anticipo-monto" step="0.01" min="0"
-                                            placeholder="$0.00">
-                                    </div>
-                                    <div style="flex:1;">
-                                        <label for="venta-anticipo-fecha" style="font-size:0.75rem;">Fecha
-                                            Anticipo</label>
-                                        <input type="date" id="venta-anticipo-fecha">
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                         <div class="form-actions full-width">
                             <button type="submit" class="btn btn-success">Registrar Venta</button>
@@ -778,6 +768,128 @@
                                 onclick="closeModal('modal-venta')">Cancelar</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Editar Venta -->
+        <div class="modal" id="modal-editar-venta">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3>Editar Venta</h3>
+                    <button class="modal-close" onclick="closeModal('modal-editar-venta')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-editar-venta" class="form-grid">
+                        <input type="hidden" id="edit-venta-id">
+                        <div class="form-group">
+                            <label for="edit-venta-vendedor">Vendedor</label>
+                            <input type="text" id="edit-venta-vendedor">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-cliente">Cliente</label>
+                            <input type="text" id="edit-venta-cliente">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-contacto">Contacto</label>
+                            <input type="text" id="edit-venta-contacto">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-rfc">RFC</label>
+                            <input type="text" id="edit-venta-rfc">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="edit-venta-direccion">Direccion</label>
+                            <input type="text" id="edit-venta-direccion">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-precio">Precio Venta</label>
+                            <input type="number" id="edit-venta-precio" step="0.01" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-forma-pago">Forma de Pago</label>
+                            <input type="text" id="edit-venta-forma-pago">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-facturado">Facturado</label>
+                            <select id="edit-venta-facturado">
+                                <option value="false">No</option>
+                                <option value="true">Si</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-num-factura">No. Factura</label>
+                            <input type="text" id="edit-venta-num-factura">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="edit-venta-cuenta">Cuenta(s) Bancaria(s)</label>
+                            <input type="text" id="edit-venta-cuenta" placeholder="Ej: BBVA 50%, Banorte 50%">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-entregado">Entregado</label>
+                            <select id="edit-venta-entregado">
+                                <option value="false">No</option>
+                                <option value="true">Si</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-venta-estado">Estado</label>
+                            <select id="edit-venta-estado">
+                                <option value="Anticipo">Anticipo</option>
+                                <option value="Liquidado">Liquidado</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="edit-venta-notas">Notas</label>
+                            <textarea id="edit-venta-notas" rows="2"></textarea>
+                        </div>
+                        <!-- Anticipos registrados -->
+                        <div class="form-group full-width">
+                            <h4 style="margin:0.5rem 0;">Historial de Anticipos</h4>
+                            <div id="edit-venta-anticipos-list" style="max-height:200px;overflow-y:auto;"></div>
+                            <button type="button" class="btn btn-sm btn-primary" style="margin-top:0.5rem;"
+                                onclick="abrirAgregarAnticipo()">+ Agregar Anticipo</button>
+                        </div>
+                        <div class="form-actions full-width">
+                            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                            <button type="button" class="btn btn-secondary"
+                                onclick="closeModal('modal-editar-venta')">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Agregar Anticipo -->
+        <div class="modal" id="modal-agregar-anticipo">
+            <div class="modal-content" style="max-width:500px;">
+                <div class="modal-header">
+                    <h3>Agregar Anticipo</h3>
+                    <button class="modal-close" onclick="closeModal('modal-agregar-anticipo')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="anticipo-venta-id">
+                    <div class="form-group">
+                        <label for="anticipo-monto">Monto *</label>
+                        <input type="number" id="anticipo-monto" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="anticipo-fecha">Fecha</label>
+                        <input type="date" id="anticipo-fecha">
+                    </div>
+                    <div class="form-group">
+                        <label for="anticipo-comprobante">Comprobante (PNG/screenshot)</label>
+                        <input type="file" id="anticipo-comprobante" accept="image/*">
+                    </div>
+                    <div class="form-group">
+                        <label for="anticipo-notas">Notas</label>
+                        <input type="text" id="anticipo-notas" placeholder="Ej: Transferencia BBVA">
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-success" onclick="guardarAnticipo()">Registrar Anticipo</button>
+                        <button class="btn btn-secondary"
+                            onclick="closeModal('modal-agregar-anticipo')">Cancelar</button>
+                    </div>
                 </div>
             </div>
         </div>
