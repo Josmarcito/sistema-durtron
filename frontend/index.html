@@ -1020,10 +1020,11 @@
         <!-- ============ ETIQUETAS ============ -->
         <section id="etiquetas" class="section">
             <h2>Generar Etiquetas</h2>
-            <p class="section-desc">Genera etiquetas de identificacion para equipos fabricados.</p>
+            <p class="section-desc">Genera etiquetas de identificacion para equipos fabricados. Salida PNG 3000x1500px
+                para maquina de grabado.</p>
 
             <div class="card">
-                <h3>Generar Etiqueta de Equipo</h3>
+                <h3>Datos del Equipo</h3>
                 <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">Selecciona un equipo del catalogo para
                     llenar automaticamente. El numero de serie se genera automaticamente.</p>
                 <div class="form-group" style="margin-bottom:12px;">
@@ -1035,35 +1036,39 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Equipo</label>
-                        <input type="text" id="etq-equipo-s" placeholder="Nombre del equipo">
+                        <input type="text" id="etq-equipo-s" placeholder="Nombre del equipo"
+                            oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Modelo</label>
-                        <input type="text" id="etq-modelo-s" placeholder="Modelo">
+                        <input type="text" id="etq-modelo-s" placeholder="Modelo" oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Capacidad</label>
-                        <input type="text" id="etq-capacidad-s" placeholder="Ej: 500 Kg/hr">
+                        <input type="text" id="etq-capacidad-s" placeholder="Ej: 500 Kg/hr"
+                            oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Potencia Motor</label>
-                        <input type="text" id="etq-potencia-s" placeholder="Ej: 15 HP">
+                        <input type="text" id="etq-potencia-s" placeholder="Ej: 15 HP"
+                            oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Apertura</label>
-                        <input type="text" id="etq-apertura-s" placeholder='Ej: 3/8"'>
+                        <input type="text" id="etq-apertura-s" placeholder='Ej: 3/8"'
+                            oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Tamano Alimentacion</label>
-                        <input type="text" id="etq-tamano-s" placeholder='Ej: 4"'>
+                        <input type="text" id="etq-tamano-s" placeholder='Ej: 4"' oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Peso del Equipo</label>
-                        <input type="text" id="etq-peso-s" placeholder="Ej: 1200 Kg">
+                        <input type="text" id="etq-peso-s" placeholder="Ej: 1200 Kg" oninput="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Fecha de Fabricacion</label>
-                        <input type="date" id="etq-fecha-fab-s">
+                        <input type="date" id="etq-fecha-fab-s" onchange="dibujarEtiquetaPreview()">
                     </div>
                     <div class="form-group">
                         <label>Numero de Serie <small style="color:#F47427;">(automatico)</small></label>
@@ -1087,9 +1092,17 @@
                     </div>
                     <div id="admin-seriales-panel-s" style="display:none; margin-top:10px;"></div>
                 </div>
+            </div>
+
+            <div class="card" style="margin-top:15px;">
+                <h3>Vista Previa de Etiqueta <small style="color:#888;">(3000x1500px)</small></h3>
+                <div style="background:#fff; border-radius:8px; padding:10px; overflow-x:auto;">
+                    <canvas id="etiqueta-canvas" width="3000" height="1500"
+                        style="width:100%; max-width:900px; height:auto; border:1px solid #ddd; display:block; margin:0 auto;"></canvas>
+                </div>
                 <div style="display:flex; gap:10px; margin-top:15px; align-items:flex-end; flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="descargarEtiquetaStandalone()"
-                        style="background:#D2152B;">Generar PDF Etiqueta</button>
+                    <button class="btn btn-primary" onclick="descargarEtiquetaPNG()"
+                        style="background:#D2152B;">Descargar PNG (3000x1500)</button>
                     <div class="form-group" style="flex:1; margin:0;">
                         <label>Email destino</label>
                         <input type="email" id="etq-email-s" placeholder="correo@ejemplo.com" style="margin:0;">

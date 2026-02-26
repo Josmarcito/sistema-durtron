@@ -2923,6 +2923,7 @@ async function autoFillEtiquetaStandalone(equipoId) {
         localStorage.setItem('durtron_serial_counters', JSON.stringify(counters));
         const serial = `${prefix}-DT${counters[prefix]}`;
         document.getElementById('etq-serie-s').value = serial;
+        dibujarEtiquetaPreview();
     } catch (e) {
         notify('Error al cargar equipo: ' + e.message, 'error');
     }
@@ -2935,11 +2936,196 @@ function getEtiquetaDataStandalone() {
         capacidad: document.getElementById('etq-capacidad-s').value || '',
         potencia: document.getElementById('etq-potencia-s').value || '',
         apertura: document.getElementById('etq-apertura-s').value || '',
-        tamano: document.getElementById('etq-tamano-s').value || '',
+        tamano_alim: document.getElementById('etq-tamano-s').value || '',
         peso: document.getElementById('etq-peso-s').value || '',
         fecha_fab: document.getElementById('etq-fecha-fab-s').value || '',
         numero_serie: document.getElementById('etq-serie-s').value || ''
     };
+}
+// ==================== ETIQUETA CANVAS SYSTEM (3000x1500px) ====================
+let etiquetaLogoImg = null;
+(function preloadLogo() {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+        // Convert to grayscale for engraving
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const ctx2 = c.getContext('2d');
+        ctx2.drawImage(img, 0, 0);
+        const imgData = ctx2.getImageData(0, 0, c.width, c.height);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+            const gray = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+            const bw = gray < 128 ? 0 : 255;
+            d[i] = bw; d[i + 1] = bw; d[i + 2] = bw;
+        }
+        ctx2.putImageData(imgData, 0, 0);
+        etiquetaLogoImg = c;
+        dibujarEtiquetaPreview();
+    };
+    img.src = 'logo.png';
+})();
+
+function dibujarEtiquetaPreview() {
+    const canvas = document.getElementById('etiqueta-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = 3000, H = 1500;
+
+    // Clear
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    // Border
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(20, 20, W - 40, H - 40);
+
+    // Draw logo (top-left)
+    if (etiquetaLogoImg) {
+        const logoH = 220;
+        const logoW = (etiquetaLogoImg.width / etiquetaLogoImg.height) * logoH;
+        ctx.drawImage(etiquetaLogoImg, 100, 70, logoW, logoH);
+    }
+
+    // Quality badge (top-right) - draw checkmark circle
+    const badgeX = 2100, badgeY = 100;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(badgeX, badgeY + 25, 30, 0, Math.PI * 2);
+    ctx.stroke();
+    // Checkmark inside
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(badgeX - 12, badgeY + 25);
+    ctx.lineTo(badgeX - 2, badgeY + 35);
+    ctx.lineTo(badgeX + 15, badgeY + 12);
+    ctx.stroke();
+    // Scalloped edge (decorative dots)
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+        ctx.beginPath();
+        ctx.arc(badgeX + Math.cos(a) * 38, badgeY + 25 + Math.sin(a) * 38, 6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 40px Inter, sans-serif';
+    ctx.fillText('Calidad Industrial', badgeX + 55, badgeY + 35);
+
+    // Pin icon + location
+    const locY = badgeY + 100;
+    ctx.beginPath();
+    ctx.arc(badgeX + 5, locY - 10, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(badgeX - 15, locY);
+    ctx.lineTo(badgeX + 5, locY + 30);
+    ctx.lineTo(badgeX + 25, locY);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(badgeX + 5, locY - 10, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 40px Inter, sans-serif';
+    ctx.fillText('Durtron Planta 1 Durango', badgeX + 55, locY + 10);
+
+    // Get form data
+    const data = getEtiquetaDataStandalone();
+
+    // Field layout - 3 columns x 3 rows matching reference
+    const fields = [
+        { label: 'Equipo', value: data.equipo, col: 0, row: 0 },
+        { label: 'Apertura', value: data.apertura, col: 1, row: 0 },
+        { label: 'Peso del Equipo', value: data.peso, col: 2, row: 0 },
+        { label: 'Modelo', value: data.modelo, col: 0, row: 1 },
+        { label: 'Tamaño de Alimentación', value: data.tamano_alim, col: 1, row: 1 },
+        { label: 'Fecha de Fabricación', value: data.fecha_fab, col: 2, row: 1 },
+        { label: 'Capacidad', value: data.capacidad, col: 0, row: 2 },
+        { label: 'Potencia', value: data.potencia, col: 1, row: 2 },
+        { label: 'Número de Serie', value: data.numero_serie, col: 2, row: 2 },
+    ];
+
+    const startX = 100, startY = 400;
+    const colW = 900, rowH = 180;
+    const lineW = 750;
+
+    fields.forEach(f => {
+        const x = startX + f.col * colW;
+        const y = startY + f.row * rowH;
+
+        // Label (italic)
+        ctx.fillStyle = '#000';
+        ctx.font = 'italic 38px Inter, sans-serif';
+        ctx.fillText(f.label, x, y);
+
+        // Value
+        ctx.font = 'bold 42px Inter, sans-serif';
+        ctx.fillText(f.value || '', x + 10, y + 60);
+
+        // Underline
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x, y + 72);
+        ctx.lineTo(x + lineW, y + 72);
+        ctx.stroke();
+    });
+
+    // Contact bar (bottom)
+    const contactY = H - 130;
+    ctx.fillStyle = '#000';
+
+    // Divider line
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(100, contactY - 30);
+    ctx.lineTo(W - 100, contactY - 30);
+    ctx.stroke();
+
+    // Phone icon (circle with phone)
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(180, contactY + 20, 35, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = '30px sans-serif';
+    ctx.fillText('✆', 164, contactY + 32);
+    ctx.font = 'bold 42px Inter, sans-serif';
+    ctx.fillText('6181341056', 240, contactY + 35);
+
+    // Email icon
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(1100, contactY + 20, 35, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = '28px sans-serif';
+    ctx.fillText('✉', 1085, contactY + 30);
+    ctx.font = 'bold 38px Inter, sans-serif';
+    ctx.fillText('contacto@durtron.com', 1160, contactY + 35);
+
+    // Web icon
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(2100, contactY + 20, 35, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = '28px sans-serif';
+    ctx.fillText('⊕', 2086, contactY + 32);
+    ctx.font = 'bold 38px Inter, sans-serif';
+    ctx.fillText('www.durtron.com', 2160, contactY + 35);
+}
+
+function descargarEtiquetaPNG() {
+    const d = getEtiquetaDataStandalone();
+    if (!d.equipo) { notify('Selecciona un equipo primero', 'error'); return; }
+    dibujarEtiquetaPreview();
+    const canvas = document.getElementById('etiqueta-canvas');
+    const link = document.createElement('a');
+    link.download = `Etiqueta_${(d.numero_serie || d.equipo || 'equipo').replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
 }
 
 function descargarEtiquetaStandalone() {
