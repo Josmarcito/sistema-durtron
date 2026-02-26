@@ -1303,24 +1303,21 @@ function setupForms() {
                         comentario: row.querySelector('.req-coment').value.trim(),
                         cantidad: parseFloat(row.querySelector('.req-cant').value) || 0,
                         unidad: 'pza',
-                        precio_unitario: parseFloat(row.querySelector('.req-precio').value) || 0,
-                        tiene_iva: row.querySelector('.req-iva').checked
+                        precio_unitario: 0,
+                        tiene_iva: false
                     });
                 }
             });
 
             if (items.length === 0) { notify('Agrega al menos un componente', 'error'); return; }
 
-            const mainProvId = document.getElementById('req-proveedor').value;
-            // Validate at least one valid provider logic? No, allowing free text.
-
             const body = {
                 inventario_id: null,
                 equipo_nombre: document.getElementById('req-equipo').selectedOptions[0]?.text || '',
-                no_control: document.getElementById('req-no-control').value.trim(),
+                no_control: '',
                 numero_serie: document.getElementById('req-numero-serie').value.trim(),
                 area: document.getElementById('req-area').value.trim(),
-                proveedor_id: mainProvId || null,
+                proveedor_id: null,
                 notas: document.getElementById('req-notas').value.trim(),
                 emitido_por: document.getElementById('req-emitido').value.trim(),
                 aprobado_por: document.getElementById('req-aprobado').value.trim(),
@@ -1977,7 +1974,7 @@ function addReqItem() {
     const container = document.getElementById('req-items-container');
     const row = document.createElement('div');
     row.className = 'req-item-row';
-    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
+    row.style.cssText = "display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 40px; gap:5px; margin-bottom:5px; align-items:center;";
 
     row.innerHTML = `
         <span style="text-align:center;font-weight:bold;color:#aaa;">${reqItemCounter}</span>
@@ -1987,23 +1984,10 @@ function addReqItem() {
              ${AVAILABLE_PROVIDERS.map(p => `<option value="${p.razon_social}">`).join('')}
         </datalist>
         <input type="text" placeholder="Comentarios" class="req-coment">
-        <input type="number" placeholder="#" class="req-cant" value="1" min="0" step="0.1" oninput="updateReqRowTotal(this)">
-        <!-- Unidad removed as requested -->
-        <input type="number" placeholder="$" class="req-precio" value="0" min="0" step="0.01" oninput="updateReqRowTotal(this)">
-        <div style="text-align:center"><input type="checkbox" class="req-iva" onchange="updateReqRowTotal(this)"></div>
-        <input type="text" class="req-subtotal" readonly value="$0.00" style="background:#eee; color:#333; text-align:right;">
-        <input type="text" class="req-total" readonly value="$0.00" style="background:#eee; color:#333; font-weight:bold; text-align:right;">
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); updateReqGrandTotal()">X</button>
+        <input type="number" placeholder="#" class="req-cant" value="1" min="0" step="0.1">
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">X</button>
     `;
     container.appendChild(row);
-    // Inherit Main Provider if selected
-    const mainProv = document.getElementById('req-proveedor');
-    if (mainProv && mainProv.value) {
-        const provName = mainProv.options[mainProv.selectedIndex].text;
-        if (provName && provName !== '-- Varios / Sin definir --') {
-            row.querySelector('.req-prov').value = provName;
-        }
-    }
 }
 
 function checkAutoProvider(input) {

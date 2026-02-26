@@ -1148,14 +1148,6 @@
                                     <option value="">-- Seleccionar equipo del catalogo --</option>
                                 </select>
                             </div>
-                            <div class="form-group" style="flex:1">
-                                <label>No. CONTROL</label>
-                                <input type="text" id="req-no-control" placeholder="Ej: RM01-00">
-                            </div>
-                            <div class="form-group" style="flex:1">
-                                <label>N/SERIE DEL EQUIPO</label>
-                                <input type="text" id="req-numero-serie" placeholder="Ej: JC150X250-DT1">
-                            </div>
                         </div>
                         <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
                             <div class="form-group" style="flex:1">
@@ -1164,10 +1156,8 @@
                                     placeholder="Área solicitante">
                             </div>
                             <div class="form-group" style="flex:1">
-                                <label>PROVEEDOR PRINCIPAL (Opcional)</label>
-                                <select id="req-proveedor">
-                                    <option value="">-- Varios / Sin definir --</option>
-                                </select>
+                                <label>N/SERIE DEL EQUIPO</label>
+                                <input type="text" id="req-numero-serie" placeholder="Ej: JC150X250-DT1">
                             </div>
                         </div>
                         <div class="form-row" style="display:flex; gap:1rem; margin-bottom:1rem;">
@@ -1197,30 +1187,21 @@
                             <label>Partidas / Componentes</label>
                             <div class="items-editor">
                                 <div class="items-header"
-                                    style="display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 1fr 0.3fr 1fr 1fr 40px; gap:5px; font-size:0.75rem; margin-bottom:5px; font-weight:bold; background:rgba(255,255,255,0.05); padding:5px; border-radius:4px;">
+                                    style="display:grid; grid-template-columns: 0.3fr 2fr 1.2fr 1.5fr 0.5fr 40px; gap:5px; font-size:0.75rem; margin-bottom:5px; font-weight:bold; background:rgba(255,255,255,0.05); padding:5px; border-radius:4px;">
                                     <span>No.</span>
                                     <span>Descripcion / Parte</span>
                                     <span>Proveedor</span>
                                     <span>Comentarios</span>
                                     <span>Cant</span>
-                                    <!-- Unidad removed -->
-                                    <span>Precio U.</span>
-                                    <span>IVA</span>
-                                    <span>Subtotal</span>
-                                    <span>Total</span>
                                     <span></span>
                                 </div>
                                 <div id="req-items-container" class="items-list-container">
                                     <!-- Items dinámicos aquí -->
                                 </div>
                                 <div
-                                    style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                                    style="display:flex; justify-content:flex-start; align-items:center; margin-top:10px;">
                                     <button type="button" class="btn btn-secondary" onclick="addReqItem()">+ Agregar
                                         Parte</button>
-                                    <div style="font-size:0.9rem; font-weight:bold;">
-                                        TOTAL GENERAL: <span id="req-total-general"
-                                            style="color:var(--accent);font-size:1.1rem;">$0.00</span>
-                                    </div>
                                 </div>
                             </div>
                         </div>
